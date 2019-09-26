@@ -4,8 +4,8 @@ Implements some basic encoders for NumPy arrays.
 
 import numpy as np
 
-class WeldNumPyEncoder(WeldEncoder):
+class NumPyWeldEncoder(WeldEncoder):
     raise NotImplementedError
 
-class WeldNumPyDecoder(WeldDecoder):
+class NumPyWeldDecoder(WeldDecoder):
     raise NotImplementedError

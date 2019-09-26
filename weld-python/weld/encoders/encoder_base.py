@@ -3,7 +3,7 @@ Defines the encoder and decoder interface for marshalling data between Python
 objects and Weld.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 
 class WeldEncoder(ABC):
     """

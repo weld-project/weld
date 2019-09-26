@@ -19,7 +19,7 @@ setup(
         "Operating System :: MacOS :: MacOS X",
     ],
     packages=["weld"],
-    rust_extensions=[RustExtension("weld.weld")],
+    rust_extensions=[RustExtension("weld.core")],
     install_requires=install_requires,
     setup_requires=setup_requires,
     include_package_data=True,

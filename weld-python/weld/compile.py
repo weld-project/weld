@@ -4,11 +4,9 @@ as Python functions.
 
 """
 
-import .core
-import .encoder
-import .types
+from .core import *
+from .encoder import *
 
-from collections import namedtuple
 import logging
 
 def _args_factory(arg_names, arg_types):

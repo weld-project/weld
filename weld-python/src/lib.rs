@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::import_exception;
 
-use weld as libweld;
+use weld;
 
 import_exception!(weld, WeldError);
 
@@ -16,7 +16,7 @@ trait ToPyErr<T, E> {
     fn to_py(self) -> PyResult<T>;
 }
 
-impl<T> ToPyErr<T, libweld::WeldError> for libweld::WeldResult<T>  {
+impl<T> ToPyErr<T, weld::WeldError> for weld::WeldResult<T>  {
     fn to_py(self) -> PyResult<T> {
         self.map_err(|e| PyErr::new::<WeldError, _>(e.message().to_str().unwrap().to_string()))
     }
@@ -24,31 +24,31 @@ impl<T> ToPyErr<T, libweld::WeldError> for libweld::WeldResult<T>  {
 
 #[pyclass]
 struct WeldContext {
-    context: libweld::WeldContext,
+    context: weld::WeldContext,
 }
 
 #[pyclass]
 struct WeldConf {
-    conf: libweld::WeldConf,
+    conf: weld::WeldConf,
 }
 
 #[pyclass]
 struct WeldValue {
-    value: libweld::WeldValue,
+    value: weld::WeldValue,
 }
 
 #[pyclass]
 struct WeldModule {
-    module: libweld::WeldModule,
+    module: weld::WeldModule,
 }
 
 #[pyclass]
 struct WeldType {
-    ty: libweld::ast::Type,
+    ty: weld::ast::Type,
 }
 
 impl WeldType {
-    fn new(ty: libweld::ast::Type) -> WeldType {
+    fn new(ty: weld::ast::Type) -> WeldType {
         WeldType {
             ty,
         }
@@ -68,7 +68,7 @@ impl WeldConf {
     fn new(obj: &PyRawObject) {
         obj.init({
             WeldConf {
-                conf: libweld::WeldConf::new(),
+                conf: weld::WeldConf::new(),
             }
         });
     }
@@ -95,7 +95,7 @@ impl WeldContext {
     fn new(obj: &PyRawObject, conf: &WeldConf) -> PyResult<()> {
         obj.init({
             WeldContext {
-                context: libweld::WeldContext::new(&conf.conf).to_py()?,
+                context: weld::WeldContext::new(&conf.conf).to_py()?,
             }
         });
         Ok(())
@@ -110,7 +110,7 @@ impl WeldContext {
 impl WeldModule {
     #[new]
     fn new(obj: &PyRawObject, code: String, conf: &WeldConf) -> PyResult<()> {
-        let module = libweld::WeldModule::compile(code, &conf.conf).to_py()?;
+        let module = weld::WeldModule::compile(code, &conf.conf).to_py()?;
         obj.init({
             WeldModule {
                 module
@@ -129,7 +129,7 @@ impl WeldModule {
 }
 
 impl WeldValue {
-    fn from_weld(value: libweld::WeldValue) -> WeldValue {
+    fn from_weld(value: weld::WeldValue) -> WeldValue {
         WeldValue {
             value
         }
@@ -142,7 +142,7 @@ impl WeldValue {
     fn new(obj: &PyRawObject, pointer: usize) {
         obj.init({
             WeldValue {
-                value: libweld::WeldValue::new_from_data(pointer as _)
+                value: weld::WeldValue::new_from_data(pointer as _)
             }
         });
     }
@@ -158,7 +158,7 @@ impl WeldValue {
 
 
 #[pymodule]
-fn weld(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<WeldConf>()?;
     m.add_class::<WeldContext>()?;
     m.add_class::<WeldModule>()?;
