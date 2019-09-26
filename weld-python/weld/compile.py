@@ -5,8 +5,10 @@ as Python functions.
 """
 
 from .core import *
-from .encoder import *
+from .encoders import WeldEncoder, PrimitiveWeldEncoder, PrimitiveWeldDecoder
+from .types import WeldType
 
+import ctypes
 import logging
 
 def _args_factory(arg_names, arg_types):
@@ -74,12 +76,13 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
     assert len(arg_types) == len(encoders)
     assert False not in [isinstance(ty, WeldType) for ty in arg_types]
     assert False not in [encoder is None or isinstance(encoder, WeldEncoder) for encoder in encoders]
+    assert isinstance(restype, WeldType)
     assert decoder is None or isinstance(decoder, WeldDecoder)
 
     if conf is None:
-        conf = core.WeldConf()
+        conf = WeldConf()
 
-    module = core.WeldModule(program, conf)
+    module = WeldModule(program, conf)
 
     # TODO(shoumik): Add assertion checking module.return_type() vs. decoder's supported types.
 
@@ -91,10 +94,10 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
         # Encoded version of each argument.
         encoded = []
 
-        primitive_encoder = weld.encoders.PrimitiveWeldEncoder()
-        primitive_decoder = weld.encoders.PrimitiveWeldDecoder()
+        primitive_encoder = PrimitiveWeldEncoder()
+        primitive_decoder = PrimitiveWeldDecoder()
 
-        for (i, (arg, arg_type, encoder)) in enumerate(zip(args, arg_type, encoders)):
+        for (i, (arg, arg_type, encoder)) in enumerate(zip(args, arg_types, encoders)):
 
             names.append("_{}".format(i))
             arg_c_types.append(arg_type.ctype_class)
@@ -102,9 +105,9 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
             logging.debug(i, arg, arg_type)
 
             if encoder is not None:
-                encoded.append(encoder.encode(arg))
+                encoded.append(encoder.encode(arg, arg_type))
             else:
-                encoded.append(primitive_encoder.encode(arg))
+                encoded.append(primitive_encoder.encode(arg, arg_type))
 
         logging.debug(names)
         logging.debug(arg_c_types)
@@ -116,17 +119,21 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
         for name, value in zip(names, encoded):
             setattr(raw_args, name, value)
 
-        raw_args_pointer = ctypes.cast(ctypes.byref(raw_args), ctypes.c_void_p)
-        weld_input = core.WeldValue(raw_args_pointer)
+        raw_args_pointer = ctypes.addressof(raw_args)
+        value = WeldValue(raw_args_pointer)
 
         if context is None:
             context = WeldContext(conf)
 
         result = module.run(context, value)
 
-        pointer_type = POINTER(restype.ctype_class)
+        pointer_type = ctypes.POINTER(restype.ctype_class)
         data = ctypes.cast(result.data(), pointer_type)
-        result = decoder.decode(data, restype)
+
+        if decoder is not None:
+            result = decoder.decode(data, restype)
+        else:
+            result = primitive_decoder.decode(data, restype)
         return (result, context)
 
     return func

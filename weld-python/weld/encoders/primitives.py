@@ -7,6 +7,7 @@ the default encoders and decoders when one is not provided.
 """
 
 from .encoder_base import *
+from ..types import *
 
 def is_int_primitive(ty):
     """
@@ -40,6 +41,6 @@ class PrimitiveWeldDecoder(WeldDecoder):
     """
     def decode(self, obj, restype):
         value = obj.contents.value
-        if isinstance(restype, WeldBool):
+        if isinstance(restype, Bool):
             return bool(value)
         return value
