@@ -11,9 +11,6 @@ import .types
 from collections import namedtuple
 import logging
 
-Encode = namedtuple('Encode', ['encoder', 'ty'])
-Primitive = namedtuple('Primitive', [])
-
 def _args_factory(arg_names, arg_types):
     """
     Constructs a ctypes Structure with the given field names and field types.

@@ -59,9 +59,3 @@ class WeldDecoder(ABC):
 
         """
         pass
-
-class PrimitiveWeldEncoder(WeldEncoder):
-    raise NotImplementedError
-
-class PrimitiveWeldDecoder(WeldDecoder):
-    raise NotImplementedError
