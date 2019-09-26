@@ -13,19 +13,6 @@ class WeldType(ABC):
     Other types should subclass this and provide an implementation of
     `ctype_class`, which describes what the Python type looks like in Weld.
 
-    Examples
-    --------
-    >>> class MyCustomInt(WeldType):
-    ...    def __str__(self):
-    ...        # Our custom type is a Weld i32.
-    ...        return "i32"
-    ...    @property
-    ...    def ctypes_class(self):
-    ...        return ctypes.c_int32
-    ...
-    >>> print(str(MyCustomInt()))
-    i32
-
     """
 
     @abstractmethod

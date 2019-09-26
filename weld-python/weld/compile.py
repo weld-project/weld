@@ -5,7 +5,8 @@ as Python functions.
 """
 
 from .core import *
-from .encoders import WeldEncoder, PrimitiveWeldEncoder, PrimitiveWeldDecoder
+from .encoders import WeldEncoder, WeldDecoder, PrimitiveWeldEncoder,\
+        PrimitiveWeldDecoder
 from .types import WeldType
 
 import ctypes
@@ -69,6 +70,41 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
         returns a value that is decoded using the provided decoder. The
         function also returns the context in which the value is allocated, in
         case the decoder does not copy data.
+
+    Examples
+    --------
+
+    The following example compiles a simple program that adds one to an
+    integer. We use the default primitive encoders/decoders by passing
+    ``None``:
+
+    >>> from weld.types import *
+    >>> func = compile("|x: i32| x + 1",
+    ...        [I32()],  [None],
+    ...        I32(), None) 
+    ...
+    >>> func(100)[0]
+    101
+    >>> func(200)[0]
+    201
+
+    The next example adds two numbers together, following the same principle as above:
+
+    >>> func = compile("|x: i32, y: i32| x + y",
+    ...        [I32(), I32()],  [None, None],
+    ...        I32(), None) 
+    ...
+    >>> func(5, 6)[0]
+    11
+
+    We can also pass encoders explicitly:
+
+    >>> func = compile("|x: i32| x + 1",
+    ...        [I32()],  [PrimitiveWeldEncoder()],
+    ...        I32(), PrimitiveWeldDecoder()) 
+    ...
+    >>> func(100)[0]
+    101
 
     """
 

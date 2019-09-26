@@ -4,8 +4,10 @@ Implements some basic encoders for NumPy arrays.
 
 import numpy as np
 
+from .encoder_base import *
+
 class NumPyWeldEncoder(WeldEncoder):
-    raise NotImplementedError
+    pass
 
 class NumPyWeldDecoder(WeldDecoder):
-    raise NotImplementedError
+    pass
