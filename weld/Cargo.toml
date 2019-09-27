@@ -1,6 +1,6 @@
 [package]
 name = "weld"
-version = "0.3.1"
+version = "0.3.0"
 authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 build = "build.rs"
 description = "Weld is a language and runtime for improving the performance of data-intensive applications."
