@@ -86,7 +86,7 @@ pub const SIR_FUNC_CALL_CONV: u32 = llvm_sys::LLVMCallConv::LLVMFastCallConv as 
 /// Convert a string literal into a C string.
 macro_rules! c_str {
     ($s:expr) => {
-        concat!($s, "\0").as_ptr() as *const i8
+        concat!($s, "\0").as_ptr() as *const ::libc::c_char
     };
 }
 
