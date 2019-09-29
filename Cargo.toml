@@ -5,3 +5,6 @@ members = [
   "weld-repl",
   "weld-hdrgen"
 ]
+exclude = [
+  "weld-python"
+]

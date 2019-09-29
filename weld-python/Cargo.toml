@@ -1,0 +1,17 @@
+[package]
+name = "weld-python"
+version = "0.3.1"
+authors = ["Shoumik Palkar <shoumik@cs.stanford.edu>"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2.0"
+weld = { path = "../weld" }
+
+[dependencies.pyo3]
+version = "0.8.0"
+features = ["extension-module"]
+
+[lib]
+name = "weld_python"
+crate-type = ["cdylib"]
