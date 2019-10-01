@@ -37,8 +37,10 @@ class PrimitiveWeldEncoder(WeldEncoder):
         encoder = target_type.ctype_class
         if isinstance(target_type, WeldStruct):
             struct = encoder()
-            for (i, (field, weld_ty)) in enumerate(zip(obj, target_type.field_types)):
-                setattr(struct, "_" + str(i), self.encode(field, weld_ty))
+            for (i, (field, weld_ty)) in enumerate(zip(\
+                    obj, target_type.field_types)):
+                encoded = self.encode(field, weld_ty)
+                setattr(struct, "_" + str(i), encoded)
             return struct
         else:
             return encoder(obj)

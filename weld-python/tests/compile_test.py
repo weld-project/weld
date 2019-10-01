@@ -1,3 +1,10 @@
+"""
+Ad-hoc test for compilation.
+
+This needs to be integrated with the pytest test suite.
+
+"""
+
 import weld
 import weld.compile
 import weld.types

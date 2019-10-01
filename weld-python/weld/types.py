@@ -22,6 +22,12 @@ class WeldType(ABC):
         """
         pass
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __hash__(self):
+        return hash(str(self))
+
     @property
     @abstractmethod
     def ctype_class(self):
@@ -222,7 +228,7 @@ class WeldStruct(WeldType):
                             for i, t in enumerate(field_types)]
             return Struct
 
-        if frozenset(self.field_types) not in WeldVec._singletons:
+        if tuple(self.field_types) not in WeldStruct._singletons:
             WeldStruct._singletons[
-                frozenset(self.field_types)] = struct_factory(self.field_types)
-        return WeldStruct._singletons[frozenset(self.field_types)]
+                tuple(self.field_types)] = struct_factory(self.field_types)
+        return WeldStruct._singletons[tuple(self.field_types)]
