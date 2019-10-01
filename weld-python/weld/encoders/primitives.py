@@ -58,7 +58,10 @@ class PrimitiveWeldDecoder(WeldDecoder):
     >>> x = encoder.encode(1, I32())
     >>> decoder.decode(ctypes.pointer(x), I32())
     1
-
+    >>> struct_type = WeldStruct((I32(), F32()))
+    >>> x = encoder.encode((1, 1.0), struct_type)
+    >>> decoder.decode(ctypes.pointer(x), struct_type)
+    (1, 1.0)
     """
     def decode(self, obj, restype):
         if isinstance(restype, Bool):
