@@ -8,7 +8,7 @@ import ctypes
 from weld.encoders import PrimitiveWeldEncoder, PrimitiveWeldDecoder
 from weld.types import *
 
-def encdec(value, ty, assert_equal=True):
+def encdec(value, ty, assert_equal=True, err=False):
     """ Helper function that encodes a value and decodes it.
 
     The function asserts that the original value and the decoded value are
@@ -22,12 +22,24 @@ def encdec(value, ty, assert_equal=True):
         the WeldType of the value
     assert_equal : bool (default True)
         Checks whether the original value and decoded value are equal.
+    err :  bool (default False)
+        If True, expects an error.
 
     """
     enc = PrimitiveWeldEncoder()
     dec = PrimitiveWeldDecoder()
 
-    result = dec.decode(ctypes.pointer(enc.encode(value, ty)), ty)
+    try:
+        result = dec.decode(ctypes.pointer(enc.encode(value, ty)), ty)
+    except Exception as e:
+        if err:
+            return
+        else:
+            raise e
+
+    if err:
+        raise RuntimeError("Expected error during encode/decode")
+
     if assert_equal:
         assert value == result
 
@@ -60,6 +72,9 @@ def test_f32_encode():
 
 def test_f64_encode():
     encdec(1.0, F64())
+
+def test_float_encode_error():
+    encdec(1.0, I32(), err=True)
 
 def test_bool_encode():
     encdec(True, Bool())
