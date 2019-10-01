@@ -217,8 +217,8 @@ class WeldStruct(WeldType):
             If the struct class already exists, it is delivered via the
             _singletons dictionary.
             """
-            class Struct(Structure):
-                _fields_ = [(str(i), t.ctype_class)
+            class Struct(ctypes.Structure):
+                _fields_ = [("_" + str(i), t.ctype_class)
                             for i, t in enumerate(field_types)]
             return Struct
 

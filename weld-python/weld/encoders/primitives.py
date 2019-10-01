@@ -27,11 +27,21 @@ class PrimitiveWeldEncoder(WeldEncoder):
     Traceback (most recent call last):
     ...
     TypeError: int expected instead of float
-
+    >>> s = encoder.encode((1.0, 1), WeldStruct((F32(), I32())))
+    >>> s._0
+    1.0
+    >>> s._1
+    1
     """
     def encode(self, obj, target_type):
         encoder = target_type.ctype_class
-        return encoder(obj)
+        if isinstance(target_type, WeldStruct):
+            struct = encoder()
+            for (i, (field, weld_ty)) in enumerate(zip(obj, target_type.field_types)):
+                setattr(struct, "_" + str(i), self.encode(field, weld_ty))
+            return struct
+        else:
+            return encoder(obj)
 
 class PrimitiveWeldDecoder(WeldDecoder):
     """
@@ -51,7 +61,17 @@ class PrimitiveWeldDecoder(WeldDecoder):
 
     """
     def decode(self, obj, restype):
-        value = obj.contents.value
         if isinstance(restype, Bool):
-            return bool(value)
-        return value
+            return bool(obj.contents.value)
+        elif isinstance(restype, WeldStruct):
+            struct = obj.contents
+            ctype_class = restype.ctype_class
+            result = []
+            for (i, (weld_ty, (cfield, cty))) in enumerate(zip(\
+                    restype.field_types, ctype_class._fields_)):
+                ofs = getattr(ctype_class, cfield).offset
+                p = ctypes.pointer(cty.from_buffer(struct, ofs))
+                result.append(self.decode(p, weld_ty))
+            return tuple(result)
+        else:
+            return obj.contents.value
