@@ -5,6 +5,8 @@ use pyo3::import_exception;
 
 use weld;
 
+pub mod npy_enc;
+
 import_exception!(weld, WeldError);
 
 /// Converts a `Result` to `PyResult`.
