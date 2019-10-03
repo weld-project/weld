@@ -6,6 +6,7 @@ directly since they only involve a pointer copy. Conversions of types that
 currently require copies are implemented in Rust.
 """
 
+import ctypes
 import numpy as np
 
 from .encoder_base import *
@@ -74,7 +75,42 @@ def dtype_to_weld_type(ty):
         raise NotImplementedError("Unicode strings not yet supported")
 
 class NumPyWeldEncoder(WeldEncoder):
-    pass
+
+    @staticmethod
+    def _convert_1d_array(array):
+        """Converts a 1D NumPy array into a Weld vector.
+
+        The vector holds a reference to the array.
+
+        Examples
+        --------
+        >>> arr = np.array([1, 2, 3])
+        >>> encoded = NumPyWeldEncoder._convert_1d_array(arr)
+        >>> encoded.length
+        c_long(3)
+        >>> encoded.data.contents
+        c_long(1)
+
+        Parameters
+        ----------
+        array : ndarray
+            A one-dimensional NumPy array.
+
+        Returns
+        -------
+        WeldVec
+
+        """
+        elem_type = dtype_to_weld_type(array.dtype)
+        vec_type = WeldVec(elem_type)
+
+        data = array.ctypes.data_as(ctypes.POINTER(elem_type.ctype_class))
+        length = ctypes.c_int64(len(array))
+
+        vec = vec_type.ctype_class()
+        vec.data = data
+        vec.length = length
+        return vec
 
 class NumPyWeldDecoder(WeldDecoder):
     pass
