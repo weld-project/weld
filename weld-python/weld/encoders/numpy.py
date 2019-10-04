@@ -77,7 +77,7 @@ def dtype_to_weld_type(ty):
 class NumPyWeldEncoder(WeldEncoder):
 
     @staticmethod
-    def _convert_1d_array(array):
+    def _convert_1d_array(array, check_type=None):
         """Converts a 1D NumPy array into a Weld vector.
 
         The vector holds a reference to the array.
@@ -95,6 +95,10 @@ class NumPyWeldEncoder(WeldEncoder):
         ----------
         array : ndarray
             A one-dimensional NumPy array.
+        check_type : WeldType, optional
+            If this value is passed, this function will check whether the
+            array's derived WeldType is equal to the passed type.  Defaults to
+            None.
 
         Returns
         -------
@@ -104,6 +108,9 @@ class NumPyWeldEncoder(WeldEncoder):
         elem_type = dtype_to_weld_type(array.dtype)
         vec_type = WeldVec(elem_type)
 
+        if check_type is not None:
+            assert check_type == vec_type
+
         data = array.ctypes.data_as(ctypes.POINTER(elem_type.ctype_class))
         length = ctypes.c_int64(len(array))
 
@@ -111,6 +118,13 @@ class NumPyWeldEncoder(WeldEncoder):
         vec.data = data
         vec.length = length
         return vec
+
+    def encode(self, obj, ty):
+        if isinstance(obj, np.ndarray):
+            if obj.ndim == 1:
+                return NumPyWeldEncoder._convert_1d_array(obj, check_type=ty)
+            else:
+                raise NotImplementedError
 
 class NumPyWeldDecoder(WeldDecoder):
     pass
