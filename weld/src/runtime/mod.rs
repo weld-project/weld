@@ -17,14 +17,14 @@ use fnv::FnvHashMap;
 use std::ffi::CStr;
 use std::fmt;
 use std::ptr;
-use std::sync::{Once, ONCE_INIT};
+use std::sync::Once;
 
 use std::alloc::{GlobalAlloc, Layout};
 
 pub type Ptr = *mut u8;
 
 /// Initialize the Weld runtime only once.
-static ONCE: Once = ONCE_INIT;
+static ONCE: Once = Once::new();
 
 /// Alignment for allocations.
 const DEFAULT_ALIGN: usize = 8;

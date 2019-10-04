@@ -9,7 +9,7 @@ use time;
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
-use std::sync::{Once, ONCE_INIT};
+use std::sync::Once;
 
 use libc::c_char;
 
@@ -30,7 +30,7 @@ use crate::codegen::Runnable;
 use crate::codegen::llvm2::intrinsic;
 use crate::codegen::llvm2::llvm_exts::*;
 
-static ONCE: Once = ONCE_INIT;
+static ONCE: Once = Once::new();
 static mut INITIALIZE_FAILED: bool = false;
 
 /// The callable function type.
