@@ -324,7 +324,10 @@ impl StatementKind {
                 vars.push(child);
                 vars.push(index);
             }
-            KeyExists { ref mut child, ref mut key } => {
+            KeyExists {
+                ref mut child,
+                ref mut key,
+            } => {
                 vars.push(child);
                 vars.push(key);
             }
@@ -404,7 +407,6 @@ impl Statement {
     pub fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
         Statement { output, kind }
     }
-
 
     /// Substitutes the symbol `target` with the symbol `with` in this statement.
     ///
@@ -669,13 +671,12 @@ impl BasicBlock {
         self.statements.push(statement);
     }
 
-
     /// Substitutes the symbol `target` with the symbol `with` in this basic block.
     ///
     /// This does not substitute the output.
     pub fn substitute_symbol(&mut self, target: &Symbol, with: &Symbol) {
         for statement in self.statements.iter_mut() {
-                statement.substitute_symbol(target, with)
+            statement.substitute_symbol(target, with)
         }
 
         for child in self.terminator.children_mut() {

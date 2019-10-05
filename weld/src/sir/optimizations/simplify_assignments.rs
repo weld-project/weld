@@ -27,8 +27,8 @@
 
 use fnv;
 
-use crate::sir::*;
 use crate::sir::StatementKind::{Assign, AssignLiteral};
+use crate::sir::*;
 
 /// Applies the simplifying assignments pass.
 pub fn simplify_assignments(prog: &mut SirProgram) -> WeldResult<()> {
@@ -39,8 +39,6 @@ pub fn simplify_assignments(prog: &mut SirProgram) -> WeldResult<()> {
 }
 
 fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
-
-
     // XXX This is a hack! Currently, the code gen assumes that the symbol names in a for loop body
     // will match the symbol names for the same data in the calling function (e.g., if the vector
     // to loop over is called `data1` in the calling function, it must be called `data1` in the
@@ -54,7 +52,7 @@ fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
     // functions that are loop bodies and are innermost loops (i.e., are guaranteed to not call
     // another for loop).
     if !func.loop_body || !func.innermost_loop {
-        return Ok(())
+        return Ok(());
     }
 
     // Assignments that are redundant and should be deleted.
@@ -78,9 +76,7 @@ fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
                 // The assignment is valid if different basic blocks assign the target different
                 // values.
                 let is_valid = match assignments.get(target) {
-                    Some(ref current_source) => {
-                        *current_source != source
-                    }
+                    Some(ref current_source) => *current_source != source,
                     None => {
                         // We haven't seen an assigment to this target before.
                         assignments.insert(target.clone(), source.clone());
@@ -93,7 +89,7 @@ fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
                     validset.insert(assignments.remove(target).unwrap());
                 }
             }
-            
+
             // Always treat assignments to a literal as valid.
             if let AssignLiteral(_) = statement.kind {
                 validset.insert(statement.output.clone().unwrap());
