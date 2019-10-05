@@ -9,7 +9,7 @@ use time;
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
-use std::sync::{Once, ONCE_INIT};
+use std::sync::Once;
 
 use libc::c_char;
 
@@ -30,7 +30,7 @@ use crate::codegen::Runnable;
 use crate::codegen::llvm2::intrinsic;
 use crate::codegen::llvm2::llvm_exts::*;
 
-static ONCE: Once = ONCE_INIT;
+static ONCE: Once = Once::new();
 static mut INITIALIZE_FAILED: bool = false;
 
 /// The callable function type.
@@ -206,9 +206,9 @@ unsafe fn initialize() {
 }
 
 unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
-    let mut target = mem::uninitialized();
+    let mut target = mem::MaybeUninit::uninit();
     let mut err = ptr::null_mut();
-    let ret = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), &mut target, &mut err);
+    let ret = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), target.as_mut_ptr(), &mut err);
     if ret == 1 {
         let err_msg = CStr::from_ptr(err as *mut c_char)
             .to_string_lossy()
@@ -217,7 +217,7 @@ unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
         compile_err!("Target initialization failed with error {}", err_msg)
     } else {
         Ok(LLVMCreateTargetMachine(
-            target,
+            target.assume_init(),
             PROCESS_TRIPLE.as_ptr(),
             HOST_CPU_NAME.as_ptr(),
             HOST_CPU_FEATURES.as_ptr(),
@@ -379,28 +379,30 @@ unsafe fn create_exec_engine(
         }
     }
 
-    let mut engine = mem::uninitialized();
-    let mut error_str = mem::uninitialized();
-    let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
+    let mut engine = mem::MaybeUninit::uninit();
+    let mut error_str = mem::MaybeUninit::uninit();
+    let mut options = mem::MaybeUninit::<LLVMMCJITCompilerOptions>::uninit();
     let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
-    LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
+    LLVMInitializeMCJITCompilerOptions(options.as_mut_ptr(), options_size);
+    let mut options: LLVMMCJITCompilerOptions = options.assume_init();
     options.OptLevel = conf.llvm.opt_level;
     options.CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
 
     let result_code = LLVMCreateMCJITCompilerForModule(
-        &mut engine,
+        engine.as_mut_ptr(),
         module,
         &mut options,
         options_size,
-        &mut error_str,
+        error_str.as_mut_ptr(),
     );
 
     if result_code != 0 {
         compile_err!(
             "Creating execution engine failed: {}",
-            CStr::from_ptr(error_str).to_str().unwrap()
+            CStr::from_ptr(error_str.assume_init()).to_str().unwrap()
         )
     } else {
+        let engine = engine.assume_init();
         for global in globals {
             LLVMAddGlobalMapping(engine, global.0, global.1);
         }
