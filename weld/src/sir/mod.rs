@@ -579,7 +579,10 @@ pub struct SirFunction {
     pub loop_variables: Vec<Symbol>,
     pub blocks: Vec<BasicBlock>,
     pub return_type: Type,
+    /// Marks whether this function is a loop body.
     pub loop_body: bool,
+    /// If loop body is true, marks whether its an innermost loop.
+    pub innermost_loop: bool,
 }
 
 impl SirFunction {
@@ -625,6 +628,7 @@ impl SirProgram {
             loop_variables: vec![],
             return_type: Unknown,
             loop_body: false,
+            innermost_loop: false,
         };
         self.funcs.push(func);
         self.funcs.len() - 1
@@ -1669,6 +1673,7 @@ fn gen_expr(
                         is_innermost = false;
                     }
                 });
+                prog.funcs[body_end_func].innermost_loop = is_innermost;
 
                 let kind = ParallelFor(ParallelForData {
                     data: pf_iters,

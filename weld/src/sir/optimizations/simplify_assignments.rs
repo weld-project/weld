@@ -39,6 +39,24 @@ pub fn simplify_assignments(prog: &mut SirProgram) -> WeldResult<()> {
 }
 
 fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
+
+
+    // XXX This is a hack! Currently, the code gen assumes that the symbol names in a for loop body
+    // will match the symbol names for the same data in the calling function (e.g., if the vector
+    // to loop over is called `data1` in the calling function, it must be called `data1` in the
+    // loop body). If this pass deletes `data1` because of a redundant assignment, it will cause
+    // an error when compiling the loop body function unless this pass becomes interprocedural. It
+    // will be better to just simplify the SIR so that the loop body functions are self contained
+    // and don't make any assumptions about symbol names -- they should just refer to their own
+    // parameters instead.
+    //
+    // For now, we circumvent deleting these symbols by just applying this optimization to
+    // functions that are loop bodies and are innermost loops (i.e., are guaranteed to not call
+    // another for loop).
+    if !func.loop_body || !func.innermost_loop {
+        return Ok(())
+    }
+
     // Assignments that are redundant and should be deleted.
     let mut assignments = fnv::FnvHashMap::default();
     // Valid assignments where the target variable is assigned different source variables in
@@ -79,6 +97,8 @@ fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
             // Always treat assignments to a literal as valid.
             if let AssignLiteral(_) = statement.kind {
                 validset.insert(statement.output.clone().unwrap());
+                // Remove the target in case it was added before.
+                assignments.remove(statement.output.as_ref().unwrap());
             }
         }
     }
@@ -87,7 +107,8 @@ fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
     for block in func.blocks.iter_mut() {
         block.statements.retain(|ref statement| {
             if let Assign(_) = statement.kind {
-                !assignments.contains_key(statement.output.as_ref().unwrap())
+                let target = statement.output.as_ref().unwrap();
+                !assignments.contains_key(target)
             } else {
                 true
             }
@@ -95,7 +116,7 @@ fn simplify_assignments_in_function(func: &mut SirFunction) -> WeldResult<()> {
 
         // Perform the substitution.
         for (key, value) in assignments.iter() {
-            block.substitute_symbol(key, value)
+            block.substitute_symbol(key, value);
         }
     }
 
