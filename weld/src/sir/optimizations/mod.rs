@@ -5,3 +5,4 @@
 //! constant folding).
 
 pub mod fold_constants;
+pub mod simplify_assignments;

@@ -252,6 +252,145 @@ impl StatementKind {
         }
         vars.into_iter()
     }
+
+    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Symbol> {
+        use self::StatementKind::*;
+        let mut vars = vec![];
+        match *self {
+            // push any existing symbols that are used (but not assigned) by the statement
+            BinOp {
+                ref mut left,
+                ref mut right,
+                ..
+            } => {
+                vars.push(left);
+                vars.push(right);
+            }
+            ParallelFor(ref mut data) => {
+                vars.push(&mut data.builder);
+                // vars.push(&data.data_arg);
+                // vars.push(&data.builder_arg);
+                // vars.push(&data.idx_arg);
+                for iter in data.data.iter_mut() {
+                    vars.push(&mut iter.data);
+                    if iter.shape.is_some() {
+                        vars.push(iter.start.as_mut().unwrap());
+                        vars.push(iter.end.as_mut().unwrap());
+                        vars.push(iter.stride.as_mut().unwrap());
+                        vars.push(iter.shape.as_mut().unwrap());
+                        vars.push(iter.strides.as_mut().unwrap());
+                    } else if iter.start.is_some() {
+                        vars.push(iter.start.as_mut().unwrap());
+                        vars.push(iter.end.as_mut().unwrap());
+                        vars.push(iter.stride.as_mut().unwrap());
+                    }
+                }
+            }
+            UnaryOp { ref mut child, .. } => {
+                vars.push(child);
+            }
+            Cast(ref mut child, _) => {
+                vars.push(child);
+            }
+            Negate(ref mut child) => {
+                vars.push(child);
+            }
+            Not(ref mut child) => {
+                vars.push(child);
+            }
+            Assert(ref mut child) => {
+                vars.push(child);
+            }
+            Broadcast(ref mut child) => {
+                vars.push(child);
+            }
+            Serialize(ref mut child) => {
+                vars.push(child);
+            }
+            Deserialize(ref mut child) => {
+                vars.push(child);
+            }
+            Lookup {
+                ref mut child,
+                ref mut index,
+            } => {
+                vars.push(child);
+                vars.push(index);
+            }
+            OptLookup {
+                ref mut child,
+                ref mut index,
+            } => {
+                vars.push(child);
+                vars.push(index);
+            }
+            KeyExists { ref mut child, ref mut key } => {
+                vars.push(child);
+                vars.push(key);
+            }
+            Slice {
+                ref mut child,
+                ref mut index,
+                ref mut size,
+            } => {
+                vars.push(child);
+                vars.push(index);
+                vars.push(size);
+            }
+            Sort { ref mut child, .. } => {
+                vars.push(child);
+            }
+            Select {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => {
+                vars.push(cond);
+                vars.push(on_true);
+                vars.push(on_false);
+            }
+            ToVec(ref mut child) => {
+                vars.push(child);
+            }
+            Length(ref mut child) => {
+                vars.push(child);
+            }
+            Assign(ref mut value) => {
+                vars.push(value);
+            }
+            Merge {
+                ref mut builder,
+                ref mut value,
+            } => {
+                vars.push(builder);
+                vars.push(value);
+            }
+            Res(ref mut builder) => vars.push(builder),
+            GetField { ref mut value, .. } => vars.push(value),
+            AssignLiteral { .. } => {}
+            NewBuilder { ref mut arg, .. } => {
+                if let Some(ref mut a) = *arg {
+                    vars.push(a);
+                }
+            }
+            MakeStruct(ref mut elems) => {
+                for elem in elems {
+                    vars.push(elem);
+                }
+            }
+            MakeVector(ref mut elems) => {
+                for elem in elems {
+                    vars.push(elem);
+                }
+            }
+            CUDF { ref mut args, .. } => {
+                for arg in args {
+                    vars.push(arg);
+                }
+            }
+        }
+        vars.into_iter()
+    }
 }
 
 /// A single statement in the SIR, with a RHS statement kind and an optional LHS output symbol.
@@ -264,6 +403,18 @@ pub struct Statement {
 impl Statement {
     pub fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
         Statement { output, kind }
+    }
+
+
+    /// Substitutes the symbol `target` with the symbol `with` in this statement.
+    ///
+    /// This does not substitute the output.
+    pub fn substitute_symbol(&mut self, target: &Symbol, with: &Symbol) {
+        for child in self.kind.children_mut() {
+            if child == target {
+                *child = with.clone();
+            }
+        }
     }
 }
 
@@ -388,6 +539,24 @@ impl Terminator {
         };
         vars.into_iter()
     }
+
+    /// Returns mutable references to symbols that the `Terminator` depends on.
+    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Symbol> {
+        use self::Terminator::*;
+        let mut vars = vec![];
+        match *self {
+            Branch { ref mut cond, .. } => {
+                vars.push(cond);
+            }
+            ProgramReturn(ref mut sym) => {
+                vars.push(sym);
+            }
+            EndFunction(ref mut sym) => vars.push(sym),
+            Crash => (),
+            JumpBlock(_) => (),
+        };
+        vars.into_iter()
+    }
 }
 
 /// A basic block inside a SIR program
@@ -494,6 +663,22 @@ impl SirFunction {
 impl BasicBlock {
     pub fn add_statement(&mut self, statement: Statement) {
         self.statements.push(statement);
+    }
+
+
+    /// Substitutes the symbol `target` with the symbol `with` in this basic block.
+    ///
+    /// This does not substitute the output.
+    pub fn substitute_symbol(&mut self, target: &Symbol, with: &Symbol) {
+        for statement in self.statements.iter_mut() {
+                statement.substitute_symbol(target, with)
+        }
+
+        for child in self.terminator.children_mut() {
+            if child == target {
+                *child = with.clone();
+            }
+        }
     }
 }
 
