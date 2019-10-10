@@ -22,12 +22,42 @@ _known_types = {
         'uint16': U16(),
         'uint32': U32(),
         'uint64': U64(),
-        'float': F32(),
         'float32': F32(),
+        'float': F64(),
         'double': F64(),
         'float64': F64(),
         'bool': Bool()
         }
+
+# Reverse of the above.
+_known_types_weld2dtype = {v: k for k, v in _known_types.items()}
+
+def weld_type_to_dtype(ty):
+    """Converts a Weld type to a NumPy dtype.
+
+    Examples
+    --------
+    >>> weld_type_to_dtype(I32())
+    dtype('int32')
+    >>> weld_type_to_dtype(F32())
+    dtype('float32')
+    >>> weld_type_to_dtype(F64())
+    dtype('float64')
+
+    Parameters
+    ----------
+    ty: WeldType
+        The type to convert
+
+    Returns
+    -------
+    dtype
+    
+    """
+    if ty in _known_types_weld2dtype:
+        return np.dtype(_known_types_weld2dtype[ty])
+
+    raise NotImplementedError("String Weld -> dtype not supported")
 
 def dtype_to_weld_type(ty):
     """Converts a NumPy data type to a Weld type.
@@ -86,8 +116,8 @@ class NumPyWeldEncoder(WeldEncoder):
         --------
         >>> arr = np.array([1, 2, 3])
         >>> encoded = NumPyWeldEncoder._convert_1d_array(arr)
-        >>> encoded.length
-        c_long(3)
+        >>> encoded.size
+        3
         >>> encoded.data.contents
         c_long(1)
 
@@ -116,7 +146,7 @@ class NumPyWeldEncoder(WeldEncoder):
 
         vec = vec_type.ctype_class()
         vec.data = data
-        vec.length = length
+        vec.size = length
         return vec
 
     def encode(self, obj, ty):
@@ -125,6 +155,55 @@ class NumPyWeldEncoder(WeldEncoder):
                 return NumPyWeldEncoder._convert_1d_array(obj, check_type=ty)
             else:
                 raise NotImplementedError
+        else:
+            raise TypeError("Unexpected type {} in NumPy encoder".format(type(obj)))
 
 class NumPyWeldDecoder(WeldDecoder):
-    pass
+    """ Decodes an encoded Weld array into a NumPy array.
+
+    >>> arr = np.array([1,2,3], dtype='int32')
+    >>> encoded = NumPyWeldEncoder().encode(arr, WeldVec(I32()))
+    >>> NumPyWeldDecoder().decode(encoded, WeldVec(I32()))
+    array([1, 2, 3], dtype=int32)
+
+    """
+
+    @staticmethod
+    def _memory_buffer(c_pointer, length, dtype):
+        """Creates a Python memory buffer from the pointer.
+
+        Parameters
+        ----------
+
+        c_pointer : ctypes pointer
+            the pointer the buffer points to
+        length : int
+            the array length
+        dtype : NumPy dtype
+            the type of the elements in the buffer.
+
+        Returns
+        -------
+        memory
+
+        """
+        arr_size = dtype.itemsize * length
+        buf_from_mem = ctypes.pythonapi.PyMemoryView_FromMemory
+        buf_from_mem.restype = ctypes.py_object
+        buf_from_mem.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_int)
+        return buf_from_mem(c_pointer, arr_size, 0x100)
+
+
+    def decode(self, obj, restype):
+        # A 1D NumPy array
+        if isinstance(restype, WeldVec) and\
+                not isinstance(restype.elem_type, WeldVec):
+            elem_type = restype.elem_type
+            dtype = weld_type_to_dtype(elem_type)
+            pointer = obj.data
+            size = obj.size
+            array = np.frombuffer(NumPyWeldDecoder._memory_buffer(pointer, size, dtype),
+                    dtype=dtype, count=size)
+            return array
+        else:
+            raise TypeError("Unsupported type {} in NumPy decoder".format(type(obj)))
