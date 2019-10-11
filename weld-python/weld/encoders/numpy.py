@@ -163,7 +163,7 @@ class NumPyWeldDecoder(WeldDecoder):
 
     >>> arr = np.array([1,2,3], dtype='int32')
     >>> encoded = NumPyWeldEncoder().encode(arr, WeldVec(I32()))
-    >>> NumPyWeldDecoder().decode(encoded, WeldVec(I32()))
+    >>> NumPyWeldDecoder().decode(ctypes.pointer(encoded), WeldVec(I32()))
     array([1, 2, 3], dtype=int32)
 
     """
@@ -196,6 +196,7 @@ class NumPyWeldDecoder(WeldDecoder):
 
     def decode(self, obj, restype):
         # A 1D NumPy array
+        obj = obj.contents
         if isinstance(restype, WeldVec) and\
                 not isinstance(restype.elem_type, WeldVec):
             elem_type = restype.elem_type
