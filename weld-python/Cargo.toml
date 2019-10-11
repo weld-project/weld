@@ -7,7 +7,6 @@ edition = "2018"
 [dependencies]
 libc = "0.2.0"
 weld = { path = "../weld" }
-numpy = "0.7.0"
 
 [dependencies.pyo3]
 version = "0.8.0"

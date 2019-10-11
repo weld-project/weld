@@ -21,8 +21,58 @@ from .encoder_base import *
 from ..types import *
 
 class weldbasearray(np.ndarray):
-    # Not implemented yet.
-    pass
+    """ A NumPy array possibly backed by a `WeldContext`.
+
+    This class is a wrapper around the NumPy `ndarray` class, but it contains
+    an additional `weld_context` attribute. This attribute references the
+    memory that backs the array, if the array was returned by Weld (or created
+    from another array that was returned by Weld). It prevents memory owned by
+    the context from being freed before all references to the array are
+    deleted.
+
+    This class also contains an additional method, `copy2numpy`, which
+    deep-copies the data referenced by this array to a regular `ndarray`. The
+    resulting array does not hold a reference to the context or the original
+    array.
+
+    If the `weld_context` attribtue is `None`, this class acts like a regular
+    `ndarray`, and the `copy2numpy` function simply copies this array.
+
+    """
+
+    def __new__(cls, input_array, weld_context=None):
+        """ Instance initializer.
+
+        Parameters
+        ----------
+        weld_context : WeldContext or None
+            If this is not `None`, it should be the context that owns the
+            memory for `input_array`.
+
+        """
+        obj = np.asarray(input_array).view(cls)
+        obj.weld_context = weld_context
+        return obj
+
+    def __array_finalize__(self, obj):
+        """ Finalizes array. See the NumPy documentation. """
+        if obj is None:
+            return
+        self.weld_context = getattr(obj, 'weld_context', None)
+
+    def copy2numpy(self):
+        """ Copies this array's data into a new NumPy `ndarray`.
+
+        Examples
+        --------
+        >>> arr = weldbasearray([1, 2, 3])
+        >>> arr
+        weldbasearray([1, 2, 3])
+        >>> arr.copy2numpy()
+        array([1, 2, 3])
+
+        """
+        return np.array(self, copy=True).view(np.ndarray)
 
 # Maps a string dtype representation to a Weld scalar type.
 _known_types = {
@@ -176,7 +226,7 @@ class NumPyWeldDecoder(WeldDecoder):
     >>> arr = np.array([1,2,3], dtype='int32')
     >>> encoded = NumPyWeldEncoder().encode(arr, WeldVec(I32()))
     >>> NumPyWeldDecoder().decode(ctypes.pointer(encoded), WeldVec(I32()))
-    array([1, 2, 3], dtype=int32)
+    weldbasearray([1, 2, 3], dtype=int32)
 
     """
 
@@ -257,6 +307,6 @@ class NumPyWeldDecoder(WeldDecoder):
             elem_type = restype.elem_type
             buf = NumPyWeldDecoder._memory_buffer(obj.data, obj.size, dtype)
             array = np.frombuffer(buf, dtype=dtype, count=obj.size)
-            return array
+            return weldbasearray(array, weld_context=context)
         else:
             raise TypeError("Unsupported type {} in NumPy decoder".format(type(obj)))
