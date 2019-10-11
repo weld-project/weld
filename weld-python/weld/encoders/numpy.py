@@ -63,6 +63,8 @@ class weldbasearray(np.ndarray):
     def copy2numpy(self):
         """ Copies this array's data into a new NumPy `ndarray`.
 
+        This is an alias for `np.array(arr, copy=True)`
+
         Examples
         --------
         >>> arr = weldbasearray([1, 2, 3])
@@ -72,7 +74,7 @@ class weldbasearray(np.ndarray):
         array([1, 2, 3])
 
         """
-        return np.array(self, copy=True).view(np.ndarray)
+        return np.array(self, copy=True)
 
 # Maps a string dtype representation to a Weld scalar type.
 _known_types = {

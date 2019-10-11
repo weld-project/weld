@@ -54,6 +54,14 @@ def test_baseweldarray_basics():
     assert sliced.base is welded
     assert sliced.weld_context is ctx
 
+    copied = sliced.copy2numpy()
+    assert copied.base is None
+    try:
+        copied.ctx
+        assert False
+    except AttributeError as e:
+        pass
+
 # Tests for encoding and decoding 1D arrays
  
 def test_bool_vec():
