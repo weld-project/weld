@@ -6,7 +6,9 @@ import ctypes
 import numpy as np
 
 from .helpers import encdec_factory
-from weld.encoders.numpy import NumPyWeldEncoder, NumPyWeldDecoder
+
+from weld import WeldConf, WeldContext
+from weld.encoders.numpy import weldbasearray, NumPyWeldEncoder, NumPyWeldDecoder
 from weld.types import *
 
 encdec = encdec_factory(NumPyWeldEncoder, NumPyWeldDecoder, eq=np.allclose)
@@ -34,6 +36,25 @@ def array(dtype, length=5):
 
     """
     return np.arange(start=0, stop=length, dtype=dtype)
+
+
+# Tests for ensuring weldbasearrays propagate their contexts properly
+
+def test_baseweldarray_basics():
+    x = np.array([1, 2, 3, 4, 5], dtype="int8")
+
+    ctx = WeldContext(WeldConf())
+
+    welded = weldbasearray(x, weld_context=ctx)
+    assert welded.dtype == "int8"
+    assert welded.weld_context is ctx
+
+    sliced = welded[1:]
+    assert np.allclose(sliced, np.array([2,3,4,5]))
+    assert sliced.base is welded
+    assert sliced.weld_context is ctx
+
+# Tests for encoding and decoding 1D arrays
  
 def test_bool_vec():
     # Booleans in NumPy, like in Weld, are represented as bytes.
