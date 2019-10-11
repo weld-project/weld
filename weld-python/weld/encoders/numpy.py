@@ -207,10 +207,10 @@ class NumPyWeldDecoder(WeldDecoder):
 
 
     def _numpy_type(weld_type):
-        """Infers the ndarray dimensions and dtype from a WeldVec type.
+        """Infers the ndarray dimensions and dtype from a Weld type.
 
-        Throws a TypeError if the weld_type cannot be represented as an
-        ndarray of some scalar type.
+        Throws a TypeError if the weld_type cannot be represented as an ndarray
+        of some scalar type.
 
         Parameters
         ----------
