@@ -1,9 +1,17 @@
 """
 Implements encoders for NumPy values.
 
+The Weld package includes native convertors for NumPy arrays because NumPy is
+the standard way for interacting with C-like array data.
+
+The encoder in this package accepts ndarray or its subclasses. The decoder in
+this module returns a subclass of ndarray called `weldbasearray`, which may
+hold a reference to a `WeldContext`. This prevents arrays backed by memory
+allocated in Weld from being freed before the array's reference count drops to
+0.
+
 Zero-copy conversions (in particular, to 1D arrays) are implemented here
-directly since they only involve a pointer copy. Conversions of types that
-currently require copies are implemented in Rust.
+directly since they only involve a pointer copy.
 """
 
 import ctypes
@@ -11,6 +19,10 @@ import numpy as np
 
 from .encoder_base import *
 from ..types import *
+
+class weldbasearray(np.ndarray):
+    # Not implemented yet.
+    pass
 
 # Maps a string dtype representation to a Weld scalar type.
 _known_types = {
@@ -51,13 +63,12 @@ def weld_type_to_dtype(ty):
 
     Returns
     -------
-    dtype
+    dtype or None
+        Returns None if the type is not recognized.
     
     """
     if ty in _known_types_weld2dtype:
         return np.dtype(_known_types_weld2dtype[ty])
-
-    raise NotImplementedError("String Weld -> dtype not supported")
 
 def dtype_to_weld_type(ty):
     """Converts a NumPy data type to a Weld type.
@@ -158,6 +169,7 @@ class NumPyWeldEncoder(WeldEncoder):
         else:
             raise TypeError("Unexpected type {} in NumPy encoder".format(type(obj)))
 
+
 class NumPyWeldDecoder(WeldDecoder):
     """ Decodes an encoded Weld array into a NumPy array.
 
@@ -194,17 +206,57 @@ class NumPyWeldDecoder(WeldDecoder):
         return buf_from_mem(c_pointer, arr_size, 0x100)
 
 
-    def decode(self, obj, restype):
+    def _numpy_type(weld_type):
+        """Infers the ndarray dimensions and dtype from a WeldVec type.
+
+        Throws a TypeError if the weld_type cannot be represented as an
+        ndarray of some scalar type.
+
+        Parameters
+        ----------
+        weld_type : WeldType
+            The type to check
+
+        Returns
+        -------
+        (int, dtype) tuple
+            The first element is the nubmer of dimensions and the second
+            element is the dtype.
+
+        >>> NumPyWeldDecoder._numpy_type(WeldVec(I8()))
+        (1, dtype('int8'))
+        >>> NumPyWeldDecoder._numpy_type(WeldVec(WeldVec(F32())))
+        (2, dtype('float32'))
+        >>> NumPyWeldDecoder._numpy_type(I32())
+        Traceback (most recent call last):
+        ...
+        TypeError: type cannot be represented as ndarray
+
+        """
+        if not isinstance(weld_type, WeldVec):
+            raise TypeError("type cannot be represented as ndarray")
+
+        dimension = 1
+        elem_type = weld_type.elem_type
+        if isinstance(elem_type, WeldVec):
+            (inner_dims, inner_ty) = NumPyWeldDecoder._numpy_type(elem_type)
+            dimension += inner_dims
+        else:
+            try:
+                inner_ty = weld_type_to_dtype(elem_type)
+            except:
+                raise TypeError("unknown element type {}".format(elem_type))
+        return (dimension, inner_ty)
+
+
+    def decode(self, obj, restype, context=None):
         # A 1D NumPy array
         obj = obj.contents
-        if isinstance(restype, WeldVec) and\
-                not isinstance(restype.elem_type, WeldVec):
+        (dims, dtype) = NumPyWeldDecoder._numpy_type(restype)
+        if dims == 1:
             elem_type = restype.elem_type
-            dtype = weld_type_to_dtype(elem_type)
-            pointer = obj.data
-            size = obj.size
-            array = np.frombuffer(NumPyWeldDecoder._memory_buffer(pointer, size, dtype),
-                    dtype=dtype, count=size)
+            buf = NumPyWeldDecoder._memory_buffer(obj.data, obj.size, dtype)
+            array = np.frombuffer(buf, dtype=dtype, count=obj.size)
             return array
         else:
             raise TypeError("Unsupported type {} in NumPy decoder".format(type(obj)))

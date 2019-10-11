@@ -167,9 +167,9 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
         data = ctypes.cast(result.data(), pointer_type)
 
         if decoder is not None:
-            result = decoder.decode(data, restype)
+            result = decoder.decode(data, restype, context)
         else:
-            result = primitive_decoder.decode(data, restype)
+            result = primitive_decoder.decode(data, restype, context)
         return (result, context)
 
     return func
