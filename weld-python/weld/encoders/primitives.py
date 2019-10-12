@@ -65,7 +65,7 @@ class PrimitiveWeldDecoder(WeldDecoder):
     >>> decoder.decode(ctypes.pointer(x), struct_type)
     (1, 1.0)
     """
-    def decode(self, obj, restype):
+    def decode(self, obj, restype, context=None):
         if isinstance(restype, Bool):
             return bool(obj.contents.value)
         elif isinstance(restype, WeldStruct):

@@ -38,7 +38,7 @@ class WeldDecoder(ABC):
     """
 
     @abstractmethod
-    def decode(obj, restype):
+    def decode(self, obj, restype, context):
         """
         Decodes the object, assuming object has the WeldType restype.
 
@@ -51,11 +51,15 @@ class WeldDecoder(ABC):
             An object encoded in the Weld ABI.
         restype : WeldType
             The WeldType of the object that is being decoded.
+        context : WeldContext or None
+            The context backing `obj` if this value was constructed in Weld.
 
         Returns
         -------
         any
-            The decoder can return any Python value.
+            The decoder can return any Python value. If the data is not copied
+            and context is not `None`, the returned object should hold a
+            reference to the context to prevent use-after-free bugs.
 
         """
         pass

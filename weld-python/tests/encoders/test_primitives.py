@@ -2,46 +2,13 @@
 Tests primitive encoders and decoders.
 """
 
-import copy
 import ctypes
 
+from .helpers import encdec_factory
 from weld.encoders import PrimitiveWeldEncoder, PrimitiveWeldDecoder
 from weld.types import *
 
-def encdec(value, ty, assert_equal=True, err=False):
-    """ Helper function that encodes a value and decodes it.
-
-    The function asserts that the original value and the decoded value are
-    equal.
-
-    Parameters
-    ----------
-    value : any
-        The value to encode and decode
-    ty : WeldType
-        the WeldType of the value
-    assert_equal : bool (default True)
-        Checks whether the original value and decoded value are equal.
-    err :  bool (default False)
-        If True, expects an error.
-
-    """
-    enc = PrimitiveWeldEncoder()
-    dec = PrimitiveWeldDecoder()
-
-    try:
-        result = dec.decode(ctypes.pointer(enc.encode(value, ty)), ty)
-    except Exception as e:
-        if err:
-            return
-        else:
-            raise e
-
-    if err:
-        raise RuntimeError("Expected error during encode/decode")
-
-    if assert_equal:
-        assert value == result
+encdec = encdec_factory(PrimitiveWeldEncoder, PrimitiveWeldDecoder)
 
 def test_i8_encode():
     encdec(-1, I8())

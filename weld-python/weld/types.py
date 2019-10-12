@@ -164,16 +164,16 @@ class WeldVec(WeldType):
             If the vector class already exists, it is delivered via the
             _singletons dictionary.
             """
-            class Vec(Structure):
+            class Vec(ctypes.Structure):
                 _fields_ = [
-                    ("ptr", ctypes.POINTER(elem_type.ctype_class)),
-                    ("size", ctypes.c_long),
+                    ("data", ctypes.POINTER(elem_type.ctype_class)),
+                    ("size", ctypes.c_int64),
                 ]
             return Vec
 
         if self.elem_type not in WeldVec._singletons:
-            WeldVec._singletons[self.elemType] = vec_factory(self.elemType)
-        return WeldVec._singletons[self.elemType]
+            WeldVec._singletons[self.elem_type] = vec_factory(self.elem_type)
+        return WeldVec._singletons[self.elem_type]
 
 
 class WeldStruct(WeldType):
