@@ -5,7 +5,7 @@
 //! # Using Weld
 //!
 //! Weld is a small programming language that supports _parallel loops_ and
-//! _builders_, which are declarative objects that specify how to buid results. The parallel loops
+//! _builders_, which are declarative objects that specify how to build results. The parallel loops
 //! can be used in conjunction with the builders to build a result in parallel.
 //!
 //! This crate contains the Weld compiler and runtime, though users only interact with the
