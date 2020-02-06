@@ -712,6 +712,7 @@ impl WeldModule {
             use crate::sir::optimizations;
             info!("Applying SIR optimizations");
             optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+            optimizations::simplify_assignments::simplify_assignments(&mut sir_prog)?;
         }
         let end = PreciseTime::now();
         debug!("Optimized SIR program:\n{}\n", &sir_prog);
