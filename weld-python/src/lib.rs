@@ -5,7 +5,7 @@ use pyo3::import_exception;
 
 use weld;
 
-import_exception!(weld.error, WeldError);
+import_exception!(weld, WeldError);
 
 /// Converts a `Result` to `PyResult`.
 ///
