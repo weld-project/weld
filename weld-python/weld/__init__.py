@@ -2,5 +2,5 @@
 Weld bindings.
 """
 
-from .error import WeldError
+# Compiled from Rust bindings.
 from .core import *
