@@ -172,7 +172,8 @@ class WeldLazy(WeldNode):
         decoder : A decoder for decoding the Weld result of this computation.
 
         """
-        self.children_ = list(dependencies)
+        # Remove duplicates here
+        self.children_ = list(set(dependencies))
         self.expression = expression
         self.decoder = decoder
         self.ty_ = ty
@@ -202,7 +203,11 @@ class WeldLazy(WeldNode):
         values = [inp.value for inp in inputs]
 
         # Collect the expressions from the remaining nodes.
-        expressions = [node.expression for node in nodes_to_execute if isinstance(node, WeldLazy)]
+        expressions = [
+                "let {name} = ({expr});".format(name=node.id, expr=node.expression) for node in nodes_to_execute if isinstance(node, WeldLazy)]
+        assert nodes_to_execute[-1] is self
+        expressions.append(str(self.id))
+
         program = self._create_function_header(inputs) + " " + "\n".join(expressions)
         print(program)
 

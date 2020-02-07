@@ -20,7 +20,8 @@ def _weldseries_constructor_with_fallback(data=None, index=None, **kwargs):
     except TypeError:
         return Series(data=data, index=index, **kwargs)
 
-class WeldSeries(GrizzlyBase, Series):
+# TODO(shoumik): Also subclass WeldLazy
+class WeldSeries(Series):
     """ A lazy Series object backed by a Weld computation. """
 
     @property
@@ -45,11 +46,3 @@ class WeldSeries(GrizzlyBase, Series):
             super(WeldSeries, self).__init__(data, index=index, **kwargs)
             return self
         return s if s is not None else Series(data, index=index, **kwargs)
-
-    def add(self, other, **unsupported_kwargs):
-        # TODO: This should be code-gen'd.
-        if len(unsupported_kwargs) > 0:
-            return NotImplemented
-        op = OpRegistry.get("add")
-        op.build_map(self.dtype, other.dtype)
-        code = binary_op(op.infix, self.resolve_dtype(self.dtype, other.dtype)
