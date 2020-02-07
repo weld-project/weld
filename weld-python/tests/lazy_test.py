@@ -37,3 +37,23 @@ def test_dependencies():
             PrimitiveWeldDecoder())
     x, _ = comp2.evaluate()
     assert x == 6
+
+def test_long_chain():
+    a = 1
+    b = 2
+    a = PhysicalValue(1, I32(), PrimitiveWeldEncoder())
+    b = PhysicalValue(2, I32(), PrimitiveWeldEncoder())
+    def add_previous(prev1, prev2):
+        # Returns an expression representing prev1 + prev2
+        return WeldLazy(
+            "{0} + {1}".format(prev1.id, prev2.id),
+            [prev1, prev2],
+            I32(),
+            PrimitiveWeldDecoder())
+
+    length = 100
+    expr = add_previous(a, b)
+    for i in range(length):
+        expr = add_previous(expr, a)
+    x, _ = expr.evaluate()
+    assert x == (length +  3)
