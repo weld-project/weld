@@ -5,7 +5,7 @@ use pyo3::import_exception;
 
 use weld;
 
-import_exception!(weld, WeldError);
+import_exception!(weld.error, WeldError);
 
 /// Converts a `Result` to `PyResult`.
 ///
@@ -18,7 +18,7 @@ trait ToPyErr<T, E> {
 
 impl<T> ToPyErr<T, weld::WeldError> for weld::WeldResult<T>  {
     fn to_py(self) -> PyResult<T> {
-        self.map_err(|e| PyErr::new::<WeldError, _>(e.message().to_str().unwrap().to_string()))
+        self.map_err(|e| WeldError::py_err(e.message().to_str().unwrap().to_string()))
     }
 }
 
