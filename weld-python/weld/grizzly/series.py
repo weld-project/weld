@@ -8,6 +8,7 @@ from pandas import Series
 from pandas.core.internals import SingleBlockManager
 
 from weld.encoders.numpy import dtype_to_weld_type
+from weld.lazy import WeldLazy
 
 def _weldseries_constructor_with_fallback(data=None, index=None, **kwargs):
     """
@@ -20,8 +21,7 @@ def _weldseries_constructor_with_fallback(data=None, index=None, **kwargs):
     except TypeError:
         return Series(data=data, index=index, **kwargs)
 
-# TODO(shoumik): Also subclass WeldLazy
-class WeldSeries(Series):
+class WeldSeries(WeldLazy, Series):
     """ A lazy Series object backed by a Weld computation. """
 
     @property
@@ -36,13 +36,22 @@ class WeldSeries(Series):
         # Everything important is done in __new__.
         pass
 
+    @classmethod
+    def resolve_weld_type(self, data):
+        return NotImplemented
+
     def __new__(cls, data=None, index=None, **kwargs):
         s = None
-        if not isinstance(data, np.ndarray):
+        if isinstance(data, WeldLazy):
+            # TODO(shoumik): Create a 1-1 dependency
+            return NotImplemented
+        elif not isinstance(data, np.ndarray):
+            # First, convert the input into a Series backed by an ndarray.
             s = Series(data, index=index, **kwargs)
             data = s.values
-        if index is not None or dtype_to_weld_type(data.dtype) is not None:
+        if _supports_grizzly(data) and index is None:
+            data = PhysicalValue(data)
             self = super(WeldSeries, cls).__new__(cls)
-            super(WeldSeries, self).__init__(data, index=index, **kwargs)
+            super(WeldSeries, self).__init__(data, **kwargs)
             return self
         return s if s is not None else Series(data, index=index, **kwargs)
