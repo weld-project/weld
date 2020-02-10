@@ -152,20 +152,13 @@ def dtype_to_weld_type(ty):
 
     Returns
     -------
-    WeldType
+    WeldType, or None if dtype not supported.
 
     """
     if not isinstance(ty, np.dtype):
         ty = np.dtype(ty)
-
     ty = str(ty)
-    if ty in _known_types:
-        return _known_types.get(ty)
-
-    if ty.startswith('S'):
-        raise TypeError("Python 2 strings not supported -- use Unicode")
-    if ty.find('U') != -1:
-        raise NotImplementedError("Unicode strings not yet supported")
+    return _known_types.get(ty)
 
 class NumPyWeldEncoder(WeldEncoder):
 

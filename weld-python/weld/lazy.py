@@ -41,6 +41,13 @@ class WeldNode(ABC):
         """ The Weld output type of this node. """
         pass
 
+    @abstractmethod
+    def evaluate(self):
+        """
+        Return a concrete result from this Weld computation.
+        """
+        pass
+
 
     # ---------------------- Provided Methods ------------------------------
 
@@ -150,6 +157,9 @@ class PhysicalValue(WeldNode):
     @property
     def output_type(self):
         return self.ty_
+
+    def evaluate(self):
+        return value
 
 class WeldLazy(WeldNode):
     """
