@@ -8,20 +8,23 @@ import pandas as pd
 import weld.encoders.numpy as wenp
 
 from pandas.core.internals import SingleBlockManager
-from weld.lazy import PhysicalValue, WeldLazy, WeldNode
+from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
+from weld.types import WeldVec
 
-def _grizzlyseries_constructor_with_fallback(data=None, index=None, **kwargs):
+from .ops import *
+
+def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
     """
     A flexible constructor for Series._constructor, which needs to be able
     to fall back to a Series (if a certain operation does not produce
     geometries)
     """
     try:
-        return GrizzlySeries(data=data, index=index, **kwargs)
+        return GrizzlySeries(data=data, **kwargs)
     except TypeError:
-        return pd.Series(data=data, index=index, **kwargs)
+        return pd.Series(data=data, **kwargs)
 
-class GrizzlySeries(WeldNode, pd.Series):
+class GrizzlySeries(pd.Series):
     """
     A lazy `Series` object backed by a Weld computation.
 
@@ -48,23 +51,65 @@ class GrizzlySeries(WeldNode, pd.Series):
     """
 
     # TODO(shoumik): Does this need to be in _metadata instead?
-    _internal_names = pd.Series._internal_names + ['weld_value']
+    _internal_names = pd.Series._internal_names + ['weld_value_', 'cached_']
     _internal_names_set = set(_internal_names)
+
+    # The encoders and decoders are stateless, so no need to instantiate them
+    # for each computation.
+    _encoder = wenp.NumPyWeldEncoder()
+    _decoder = wenp.NumPyWeldDecoder()
 
     # ---------------------- WeldNode abstract methods ---------------------
 
     @property
     def children(self):
-        raise NotImplementedError
+        """
+        Returns the Weld children of this `GrizzlySeries.
+        """
+        return self.weld_value_.children
 
     @property
     def output_type(self):
-        raise NotImplementedError
+        """
+        Returns the Weld output type of this `GrizzlySeries`.
+        """
+        return self.weld_value_.output_type
+
+    @property
+    def is_value(self):
+        """
+        Returns whether this `GrizzlySeries` wraps a physical value rather than
+        a computation.
+        """
+        return self.weld_value_.is_identity
 
     def evaluate(self):
-        raise NotImplementedError
+        """
+        Evaluates this `GrizzlySeries` and returns itself.
 
-    # ---------------------- pd.Series methods ------------------------------
+        Evaluation reduces the currently stored computation to a physical value
+        by compiling and running a Weld program. If this `GrizzlySeries` refers
+        to a physical value and no computation, no program is compiled, and this
+        method does nothing.
+
+        Evaluation results are cached. Subsequent calls to `evaluate()` on this
+        `GrizzlySeries` will return `self` unmodified.
+
+        """
+        if self.cached_ is None:
+            result = self.weld_value_.evaluate()
+            self.cached_ = (pd.Series(result[0]), result[1])
+            self.weld_value_ = identity(PhysicalValue(self.cached_[0].values,\
+                    self.output_type, GrizzlySeries._encoder),
+                    GrizzlySeries._decoder)
+        return self
+
+    def to_pandas(self):
+        self.evaluate()
+        assert self.cached_ is not None
+        return self.cached_[0]
+
+    # ------------- pd.Series methods required for subclassing ----------
 
     @property
     def _constructor(self):
@@ -89,7 +134,8 @@ class GrizzlySeries(WeldNode, pd.Series):
         """
         if not isinstance(data, np.ndarray) or data.ndim != 1:
             return None
-        return wenp.dtype_to_weld_type(data.dtype)
+        elem_type = wenp.dtype_to_weld_type(data.dtype)
+        return WeldVec(elem_type) if elem_type is not None else None
 
     # ---------------------- Implementation ------------------------------
 
@@ -119,11 +165,13 @@ class GrizzlySeries(WeldNode, pd.Series):
         >>> y.__class__
         <class 'pandas.core.series.Series'>
         """
-
         s = None
-        if isinstance(data, WeldNode):
-            # TODO(shoumik): Create a 1-1 dependency
-            return NotImplemented
+        if isinstance(data, WeldLazy):
+            self = super(GrizzlySeries, cls).__new__(cls)
+            super(GrizzlySeries, self).__init__(None, dtype='object', **kwargs)
+            self.weld_value_ = data
+            self.cached_ = None
+            return self
         elif len(kwargs) != 0:
             return pd.Series(data, **kwargs)
         elif not isinstance(data, np.ndarray):
@@ -136,6 +184,30 @@ class GrizzlySeries(WeldNode, pd.Series):
         if weld_type is not None:
             self = super(GrizzlySeries, cls).__new__(cls)
             super(GrizzlySeries, self).__init__(data, **kwargs)
-            self.weld_value = PhysicalValue(data, weld_type, wenp.NumPyWeldEncoder())
+            self.weld_value_ = identity(
+                    PhysicalValue(data, weld_type, GrizzlySeries._encoder),
+                    GrizzlySeries._decoder)
+            self.cached_ = None
             return self
+        # Don't re-convert values if we did it once already -- it's expensive.
         return s if s is not None else pd.Series(data, **kwargs)
+
+    def add(self, other):
+        code = binary_map("+", str(self.output_type.elem_type),
+                str(self.weld_value_.id), str(other.weld_value_.id))
+        lazy = WeldLazy(code, [self.weld_value_, other.weld_value_],
+                self.output_type, GrizzlySeries._decoder)
+        return GrizzlySeries(lazy)
+
+    def __str__(self):
+        if self.is_value:
+            self.evaluate()
+        if self.cached_ is not None:
+            return str(self.cached_[0])
+        return "GrizzlySeries({}, dtype: {}, deps: [{}])".format(
+                self.weld_value_.expression,
+                str(wenp.weld_type_to_dtype(self.output_type.elem_type)),
+                ", ".join([str(child.id) for child in self.children]))
+
+    def __repr__(self):
+        return str(self)

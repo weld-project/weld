@@ -36,6 +36,13 @@ class WeldType(ABC):
         """
         pass
 
+    @property
+    def size(self):
+        """
+        Returns the size of this type in bytes.
+        """
+        return ctypes.sizeof(self.ctype_class)
+
 
 def _define_primitive_type(typename, ir, ctype, classdoc=None, add_to_module=True):
     """
