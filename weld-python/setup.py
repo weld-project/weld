@@ -5,7 +5,7 @@ from setuptools import setup
 from setuptools_rust import RustExtension
 
 setup_requires = ["setuptools-rust>=0.10.1", "wheel"]
-install_requires = []
+install_requires = ["numpy"]
 
 setup(
     name="weld",

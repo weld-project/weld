@@ -37,7 +37,7 @@ class WeldType(ABC):
         pass
 
 
-def define_primitive_type(typename, ir, ctype, classdoc=None, add_to_module=True):
+def _define_primitive_type(typename, ir, ctype, classdoc=None, add_to_module=True):
     """
     A factory function that generates classes for different primitive weld types.
 
@@ -95,25 +95,25 @@ class {typename}(WeldType):
     return result
 
 # Booleans and characters
-define_primitive_type('Bool', 'bool', "ctypes.c_byte", classdoc="A boolean type.")
-define_primitive_type('Char', 'i8',   "ctypes.c_byte",
+_define_primitive_type('Bool', 'bool', "ctypes.c_byte", classdoc="A boolean type.")
+_define_primitive_type('Char', 'i8',   "ctypes.c_byte",
         classdoc="An ASCII character, represented as a 8-bit signed integer.")
 
 # Signed integers
-define_primitive_type('I8',  'i8',  "ctypes.c_int8",  classdoc="An 8-bit signed integer.")
-define_primitive_type('I16', 'i16', "ctypes.c_int16", classdoc="A 16-bit signed integer.")
-define_primitive_type('I32', 'i32', "ctypes.c_int32", classdoc="A 32-bit signed integer.")
-define_primitive_type('I64', 'i64', "ctypes.c_int64", classdoc="A 64-bit signed integer.")
+_define_primitive_type('I8',  'i8',  "ctypes.c_int8",  classdoc="An 8-bit signed integer.")
+_define_primitive_type('I16', 'i16', "ctypes.c_int16", classdoc="A 16-bit signed integer.")
+_define_primitive_type('I32', 'i32', "ctypes.c_int32", classdoc="A 32-bit signed integer.")
+_define_primitive_type('I64', 'i64', "ctypes.c_int64", classdoc="A 64-bit signed integer.")
 
 # Unsigned integers
-define_primitive_type('U8',  'u8',  "ctypes.c_uint8",  classdoc="An 8-bit unsigned integer.")
-define_primitive_type('U16', 'u16', "ctypes.c_uint16", classdoc="A 16-bit unsigned integer.")
-define_primitive_type('U32', 'u32', "ctypes.c_uint32", classdoc="A 32-bit unsigned integer.")
-define_primitive_type('U64', 'u64', "ctypes.c_uint64", classdoc="A 64-bit unsigned integer.")
+_define_primitive_type('U8',  'u8',  "ctypes.c_uint8",  classdoc="An 8-bit unsigned integer.")
+_define_primitive_type('U16', 'u16', "ctypes.c_uint16", classdoc="A 16-bit unsigned integer.")
+_define_primitive_type('U32', 'u32', "ctypes.c_uint32", classdoc="A 32-bit unsigned integer.")
+_define_primitive_type('U64', 'u64', "ctypes.c_uint64", classdoc="A 64-bit unsigned integer.")
 
 # Floating point.
-define_primitive_type('F32', 'f32', "ctypes.c_float",  classdoc="A 32-bit IEEE floating point.")
-define_primitive_type('F64', 'f64', "ctypes.c_double", classdoc="A 64-bit IEEE floating point.")
+_define_primitive_type('F32', 'f32', "ctypes.c_float",  classdoc="A 32-bit IEEE floating point.")
+_define_primitive_type('F64', 'f64', "ctypes.c_double", classdoc="A 64-bit IEEE floating point.")
 
 class WeldVec(WeldType):
     """

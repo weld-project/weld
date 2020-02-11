@@ -24,9 +24,12 @@ python/pyweld/build/
 python/pyweld/dist/
 python/grizzly/build
 *.egg-info/
-weldenv/
 
+# Environments etc.
 weld-python/doc/build
+site-packages/
+weld-dev/
+weldenv/
 
 llvmext/test
 
