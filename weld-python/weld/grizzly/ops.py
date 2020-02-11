@@ -73,7 +73,6 @@ class BinaryOp(Op):
 class CompareOp(BinaryOp):
     pass
 
-
 class OpRegistry(object):
     """
     A singleton for holding the supported operations. 
