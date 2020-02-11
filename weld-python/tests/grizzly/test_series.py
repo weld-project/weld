@@ -47,6 +47,15 @@ def test_truediv():
     _test_binop(gr.GrizzlySeries.divide, pd.Series.divide, "divide")
     _test_binop(gr.GrizzlySeries.__truediv__, pd.Series.__truediv__, "__truediv__")
 
+
+def _compare_vs_pandas(func):
+    expect = func(pd.Series)
+    got = func(gr.GrizzlySeries)
+    # Make sure we actually used Grizzly for the whole comptuation.
+    assert isinstance(got, gr.GrizzlySeries)
+    got = got.to_pandas()
+    assert got.equals(expect)
+
 def test_arithmetic_expression():
     def eval_expression(cls):
         a = cls([1, 2, 3], dtype='int32')
@@ -55,10 +64,17 @@ def test_arithmetic_expression():
         d = (c + a) * (c + b)
         e = (d / a) - (d / b)
         return a + b + c * d - e
+    _compare_vs_pandas(eval_expression)
 
-    expect = eval_expression(pd.Series)
-    got = eval_expression(gr.GrizzlySeries)
-    # Make sure we actually used Grizzly for the whole comptuation.
-    assert isinstance(got, gr.GrizzlySeries)
-    got = got.to_pandas()
-    assert got.equals(expect)
+def test_float_nan():
+    import numpy as np
+    def eval_expression(cls):
+        a = cls([1, 2, np.nan])
+        b = cls([np.nan, 5, 6])
+        c = a + b * b - a
+        d = (c + a) * (c + b)
+        e = (d / a) - (d / b)
+        return a + b + c * d - e
+    _compare_vs_pandas(eval_expression)
+
+
