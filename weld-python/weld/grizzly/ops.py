@@ -146,27 +146,32 @@ def unary_map(op, ty, value):
     return "map({value}, |e: {ty}| {unary_apply})".format(
             value=value, unary_apply=unary_apply(op, "e"), ty=ty)
 
-def binary_apply(op, leftval, rightval, infix=True):
+def binary_apply(op, leftval, rightval, cast_type, infix=True):
+    """
+    Applies the binary operator 'op' to 'leftval' and 'rightval'.
+    The operands are cast to the type 'cast_type' first.
+    """
     if infix:
-        return "({leftval} {op} {rightval})".format(
-                op=op, leftval=leftval, rightval=rightval)
+        return "({cast_type}({leftval}) {op} {cast_type}({rightval}))".format(
+                op=op, leftval=leftval, rightval=rightval, cast_type=cast_type)
     else:
-        return "{op}({leftval}, {rightval})".format(
-                op=op, leftval=leftval, rightval=rightval)
+        return "{op}({cast_type}({leftval}), {cast_type}({rightval}))".format(
+                op=op, leftval=leftval, rightval=rightval, cast_type=cast_type)
 
-def binary_map(op, ty, leftval, rightval, infix=True):
+def binary_map(op, left_type, right_type, leftval, rightval, cast_type, infix=True):
     """
     Constructs a Weld string to apply a binary function to two vectors
-    elementwise.
+    'leftval' and 'rightval' elementwise. Each element in the loop is cast to
+    'cast_type' first.
 
     Examples
     --------
-    >>> binary_map("+", "i32", "l", "r")
-    'map(zip(l, r), |e: {i32,i32}| (e.$0 + e.$1))'
-    >>> binary_map("max", "i32", "l", "r", infix=False)
-    'map(zip(l, r), |e: {i32,i32}| max(e.$0, e.$1))'
+    >>> binary_map("+", "i32", "i32", "l", "r", "i32")
+    'map(zip(l, r), |e: {i32,i32}| (i32(e.$0) + i32(e.$1)))'
+    >>> binary_map("max", "i32", "i16", "l", "r", 'i64', infix=False)
+    'map(zip(l, r), |e: {i32,i16}| max(i64(e.$0), i64(e.$1)))'
     """
-    return "map(zip({leftval}, {rightval}), |e: {{{ty},{ty}}}| {binary_apply})".format(
+    return "map(zip({leftval}, {rightval}), |e: {{{left_type},{right_type}}}| {binary_apply})".format(
              leftval=leftval, rightval=rightval,
-             ty=ty,
-             binary_apply=binary_apply(op, "e.$0", "e.$1", infix=infix))
+             left_type=left_type, right_type=right_type,
+             binary_apply=binary_apply(op, "e.$0", "e.$1", cast_type, infix=infix))

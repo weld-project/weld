@@ -96,7 +96,7 @@ _known_types = {
 # Reverse of the above.
 _known_types_weld2dtype = {v: k for k, v in _known_types.items()}
 
-def binop_output_type(left_ty, right_ty):
+def binop_output_type(left_ty, right_ty, truediv=False):
     """
     Returns the output type when applying an arithmetic binary operator
     with the given input types.
@@ -105,6 +105,8 @@ def binop_output_type(left_ty, right_ty):
     ----------
     left_ty : WeldType
     right_ty : WeldType
+    truediv: boolean
+        Division has some special rules.
 
     Returns
     -------
@@ -123,8 +125,10 @@ def binop_output_type(left_ty, right_ty):
     >>> binop_output_type(I8(), U64())
     <weld.types.F64 object at ...>
     """
-    if left_ty == right_ty:
+    if not truediv and left_ty == right_ty:
         return left_ty
+    if truediv and left_ty == F32() and right_ty == F32():
+        return F32()
 
     size_to_ty = [(ty.size, ty) for ty in _known_types.values()]
     float_types = set([F32(), F64()])
@@ -147,6 +151,8 @@ def binop_output_type(left_ty, right_ty):
                 # two floats: use double
                 return F64()
         # one input is a double: use double.
+        return F64()
+    elif truediv:
         return F64()
     else:
         # Rule here is to use the biggest type if the two types have different

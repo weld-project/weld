@@ -9,7 +9,7 @@ import weld.encoders.numpy as wenp
 
 from pandas.core.internals import SingleBlockManager
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
-from weld.types import WeldVec
+from weld.types import *
 
 from .ops import *
 
@@ -39,6 +39,8 @@ class GrizzlySeries(pd.Series):
 
     data : array-like, Iteratble, dict, or scalar value
         Contains data stored in the series.
+    dtype : numpy.dtype or str
+        Data type of the values.
 
     Examples
     --------
@@ -98,8 +100,14 @@ class GrizzlySeries(pd.Series):
         """
         if self.cached_ is None:
             result = self.weld_value_.evaluate()
-            self.cached_ = (pd.Series(result[0]), result[1])
-            self.weld_value_ = identity(PhysicalValue(self.cached_[0].values,\
+            # TODO(shoumik): it's unfortunate that this copy is needed, but
+            # things are breaking without it (even if we hold a reference to
+            # the WeldContext). DEBUG ME!
+            if isinstance(result[0], wenp.weldbasearray):
+                self.cached_ = pd.Series(result[0].copy2numpy())
+            else:
+                self.cached_ = pd.Series(result[0])
+            self.weld_value_ = identity(PhysicalValue(self.cached_.values,\
                     self.output_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
         return self
@@ -107,7 +115,7 @@ class GrizzlySeries(pd.Series):
     def to_pandas(self):
         self.evaluate()
         assert self.cached_ is not None
-        return self.cached_[0]
+        return self.cached_
 
     # ------------- pd.Series methods required for subclassing ----------
 
@@ -137,13 +145,13 @@ class GrizzlySeries(pd.Series):
         elem_type = wenp.dtype_to_weld_type(data.dtype)
         return WeldVec(elem_type) if elem_type is not None else None
 
-    # ---------------------- Implementation ------------------------------
+    # ---------------------- Initialization ------------------------------
 
-    def __init__(self, data, **kwargs):
+    def __init__(self, data, dtype=None, **kwargs):
         # Everything important is done in __new__.
         pass
 
-    def __new__(cls, data, **kwargs):
+    def __new__(cls, data, dtype=None, **kwargs):
         """
         Internal initialization. Tests below are for internal visibility only.
 
@@ -158,6 +166,14 @@ class GrizzlySeries(pd.Series):
         >>> x = GrizzlySeries(np.ones(5))
         >>> x.__class__
         <class 'weld.grizzly.series.GrizzlySeries'>
+        >>> z = GrizzlySeries([1, 2, 3], dtype='int16') # Unsupported
+        >>> z
+        0    1
+        1    2
+        2    3
+        dtype: int16
+        >>> z.__class__
+        <class 'weld.grizzly.series.GrizzlySeries'>
         >>> y = GrizzlySeries(['hi', 'bye']) # Unsupported
         >>> y.__class__
         <class 'pandas.core.series.Series'>
@@ -168,7 +184,7 @@ class GrizzlySeries(pd.Series):
         s = None
         if isinstance(data, WeldLazy):
             self = super(GrizzlySeries, cls).__new__(cls)
-            super(GrizzlySeries, self).__init__(None, dtype='object', **kwargs)
+            super(GrizzlySeries, self).__init__(None, dtype=dtype, **kwargs)
             self.weld_value_ = data
             self.cached_ = None
             return self
@@ -176,14 +192,14 @@ class GrizzlySeries(pd.Series):
             return pd.Series(data, **kwargs)
         elif not isinstance(data, np.ndarray):
             # First, convert the input into a Series backed by an ndarray.
-            s = pd.Series(data, **kwargs)
+            s = pd.Series(data, dtype=dtype, **kwargs)
             data = s.values
         
         # Try to create a Weld type for the input.
         weld_type = GrizzlySeries._supports_grizzly(data)
         if weld_type is not None:
             self = super(GrizzlySeries, cls).__new__(cls)
-            super(GrizzlySeries, self).__init__(data, **kwargs)
+            super(GrizzlySeries, self).__init__(data, dtype=dtype, **kwargs)
             self.weld_value_ = identity(
                     PhysicalValue(data, weld_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
@@ -192,18 +208,66 @@ class GrizzlySeries(pd.Series):
         # Don't re-convert values if we did it once already -- it's expensive.
         return s if s is not None else pd.Series(data, **kwargs)
 
-    def add(self, other):
-        code = binary_map("+", str(self.output_type.elem_type),
-                str(self.weld_value_.id), str(other.weld_value_.id))
+    # ---------------------- Binary operators ------------------------------
+    #
+    # TODO(shoumik): this can probably be refactored a bit, so common arguments
+    # added to each of these functions will propagate automatically, etc.
+
+    def _arithmetic_binop_impl(self, other, op, truediv=False):
+        """
+        Performs the operation on two `Series` elementwise.
+        """
+        left_ty = self.output_type.elem_type
+        right_ty = other.output_type.elem_type
+        output_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+        code = binary_map(op,
+                left_type=str(left_ty),
+                right_type=str(right_ty),
+                leftval=str(self.weld_value_.id),
+                rightval=str(other.weld_value_.id),
+                cast_type=output_type)
         lazy = WeldLazy(code, [self.weld_value_, other.weld_value_],
-                self.output_type, GrizzlySeries._decoder)
-        return GrizzlySeries(lazy)
+                WeldVec(output_type), GrizzlySeries._decoder)
+        return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(output_type))
+
+    def add(self, other):
+        return self._arithmetic_binop_impl(other, '+')
+
+    def sub(self, other):
+        return self._arithmetic_binop_impl(other, '-')
+
+    def mul(self, other):
+        return self._arithmetic_binop_impl(other, '*')
+
+    def truediv(self, other):
+        return self._arithmetic_binop_impl(other, '/', truediv=True)
+
+    def divide(self, other):
+        return self.truediv(other)
+
+    def div(self, other):
+        return self.truediv(other)
+
+    def __add__(self, other):
+        return self.add(other)
+
+    def __sub__(self, other):
+        return self.sub(other)
+
+    def __mul__(self, other):
+        return self.mul(other)
+
+    def __truediv__(self, other):
+        return self.truediv(other)
+
+    def __divmod__(self, other):
+        return self.divmod(other)
 
     def __str__(self):
         if self.is_value:
             self.evaluate()
         if self.cached_ is not None:
-            return str(self.cached_[0])
+            return str(self.cached_)
         return "GrizzlySeries({}, dtype: {}, deps: [{}])".format(
                 self.weld_value_.expression,
                 str(wenp.weld_type_to_dtype(self.output_type.elem_type)),
