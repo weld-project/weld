@@ -17,6 +17,8 @@ def test_simple():
             I32(),
             PrimitiveWeldDecoder())
     x, _ = comp1.evaluate()
+
+    assert comp1.num_dependencies == 2
     assert x == 3
 
 def test_dependencies():
@@ -35,6 +37,8 @@ def test_dependencies():
             [comp1, comp1],
             I32(),
             PrimitiveWeldDecoder())
+
+    assert comp2.num_dependencies == 3
     x, _ = comp2.evaluate()
     assert x == 6
 
@@ -55,5 +59,8 @@ def test_long_chain():
     expr = add_previous(a, b)
     for i in range(length):
         expr = add_previous(expr, a)
+
+    # 2 physical values and length sub-expressions.
+    assert expr.num_dependencies == length + 2
     x, _ = expr.evaluate()
     assert x == (length +  3)

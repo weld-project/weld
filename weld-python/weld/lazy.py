@@ -196,6 +196,18 @@ class WeldLazy(WeldNode):
         return self.children_
 
     @property
+    def num_dependencies(self):
+        """
+        Returns the total number of dependencies this computation relies on.
+        This does not count `self` as a dependency.
+        """
+        def increment(node, count):
+            count[0] += 1
+        count = [0]
+        self.walk(increment, count)
+        return count[0] - 1
+
+    @property
     def output_type(self):
         return self.ty_
 
