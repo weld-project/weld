@@ -3,6 +3,7 @@ Test basic Series functionality.
 
 """
 
+import numpy as np
 import pandas as pd
 import weld.grizzly.series as gr
 
@@ -49,12 +50,18 @@ def test_truediv():
 
 
 def _compare_vs_pandas(func):
+    """
+    Helper to compare Pandas and Grizzly output. `func`
+    is a generator that can yield one or more values to test
+    for equality.
+    """
     expect = func(pd.Series)
     got = func(gr.GrizzlySeries)
-    # Make sure we actually used Grizzly for the whole comptuation.
-    assert isinstance(got, gr.GrizzlySeries)
-    got = got.to_pandas()
-    assert got.equals(expect)
+    for (expect, got) in zip(func(pd.Series), func(gr.GrizzlySeries)):
+        # Make sure we actually used Grizzly for the whole comptuation.
+        assert isinstance(got, gr.GrizzlySeries)
+        got = got.to_pandas()
+        assert got.equals(expect)
 
 def test_arithmetic_expression():
     def eval_expression(cls):
@@ -63,18 +70,37 @@ def test_arithmetic_expression():
         c = a + b * b - a
         d = (c + a) * (c + b)
         e = (d / a) - (d / b)
-        return a + b + c * d - e
+        yield a + b + c * d - e
     _compare_vs_pandas(eval_expression)
 
 def test_float_nan():
-    import numpy as np
     def eval_expression(cls):
         a = cls([1, 2, np.nan])
         b = cls([np.nan, 5, 6])
         c = a + b * b - a
         d = (c + a) * (c + b)
         e = (d / a) - (d / b)
-        return a + b + c * d - e
+        yield a + b + c * d - e
     _compare_vs_pandas(eval_expression)
 
-
+def test_basic_fallback():
+    # Tests basic unsupported functionality.
+    # NOTE: This test will need to change as more features are added...
+    def eval_expression(cls):
+        a = cls([1, 2, 3])
+        b = cls([-4, 5, -6])
+        # Test 1: abs()
+        c = a + b
+        yield (c.abs() + a)
+        # Test 2: agg()
+        c = a + b
+        yield cls(c.agg(np.sum)) # wrap with cls for type checking
+        # Test 3: argmin()
+        c = a + b
+        yield cls(c.argmin())
+        # Test 4: reindex()
+        c = a + b
+        res = c.reindex(index=[2, 0, 1])
+        # Falls back to Pandas, since we don't support indices.
+        assert isinstance(res, pd.Series)
+    _compare_vs_pandas(eval_expression)

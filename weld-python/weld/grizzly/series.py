@@ -5,6 +5,7 @@ A Weld wrapper for pandas.Series.
 import inspect
 import numpy as np
 import pandas as pd
+import warnings
 
 import weld.encoders.numpy as wenp
 
@@ -181,11 +182,11 @@ class GrizzlySeries(pd.Series):
 
     # ---------------------- Initialization ------------------------------
 
-    def __init__(self, data, dtype=None, **kwargs):
+    def __init__(self, data, dtype=None, index=None, **kwargs):
         # Everything important is done in __new__.
         pass
 
-    def __new__(cls, data, dtype=None, **kwargs):
+    def __new__(cls, data, dtype=None, index=None, **kwargs):
         """
         Internal initialization. Tests below are for internal visibility only.
 
@@ -213,11 +214,16 @@ class GrizzlySeries(pd.Series):
             super(GrizzlySeries, self).__init__(None, dtype=dtype, **kwargs)
             self.weld_value_ = data
             return self
+        elif index is not None and not isinstance(index, pd.RangeIndex):
+            # TODO(shoumik): This is probably incomplete, since we could have a
+            # RangeIndex that does not capture the full span of the data, has a
+            # non-zero step, etc.
+            return pd.Series(data, dtype=dtype, index=index, **kwargs)
         elif len(kwargs) != 0:
-            return pd.Series(data, **kwargs)
+            return pd.Series(data, dtype=dtype, index=index, **kwargs)
         elif not isinstance(data, np.ndarray):
             # First, convert the input into a Series backed by an ndarray.
-            s = pd.Series(data, dtype=dtype, **kwargs)
+            s = pd.Series(data, dtype=dtype, index=index, **kwargs)
             data = s.values
         
         # Try to create a Weld type for the input.
@@ -230,7 +236,7 @@ class GrizzlySeries(pd.Series):
                     GrizzlySeries._decoder)
             return self
         # Don't re-convert values if we did it once already -- it's expensive.
-        return s if s is not None else pd.Series(data, **kwargs)
+        return s if s is not None else pd.Series(data, dtype=dtype, index=index, **kwargs)
 
     # ---------------------- Operators ------------------------------
     #
@@ -331,7 +337,16 @@ class GrizzlySeries(pd.Series):
             @wraps(func)
             def forwarding_wrapper(self, *args, **kwargs):
                 self.evaluate()
-                return func(self, *args, **kwargs)
+                result = func(self, *args, **kwargs)
+                # Unsupported functions will return Series -- try to
+                # switch back to GrizzlySeries.
+                if not isinstance(result, GrizzlySeries) and isinstance(result, pd.Series):
+                    try_convert = GrizzlySeries(data=result.values, index=result.index)
+                    if not isinstance(try_convert, GrizzlySeries):
+                        warnings.warn("Unsupported operation '{}' produced unsupported Series: falling back to Pandas".format(
+                            func.__name__))
+                    return try_convert
+                return result
             return forwarding_wrapper
         return forward_decorator
 
