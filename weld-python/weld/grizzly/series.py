@@ -2,6 +2,7 @@
 A Weld wrapper for pandas.Series.
 """
 
+import inspect
 import numpy as np
 import pandas as pd
 
@@ -104,6 +105,7 @@ class GrizzlySeries(pd.Series):
             # things are breaking without it (even if we hold a reference to
             # the WeldContext). DEBUG ME!
             if isinstance(result[0], wenp.weldbasearray):
+                #super(GrizzlySeries, self).__init__(result[0].copy2numpy())
                 self.cached_ = pd.Series(result[0].copy2numpy())
             else:
                 self.cached_ = pd.Series(result[0])
@@ -208,10 +210,55 @@ class GrizzlySeries(pd.Series):
         # Don't re-convert values if we did it once already -- it's expensive.
         return s if s is not None else pd.Series(data, **kwargs)
 
-    # ---------------------- Binary operators ------------------------------
+    # ---------------------- Operators ------------------------------
     #
     # TODO(shoumik): this can probably be refactored a bit, so common arguments
     # added to each of these functions will propagate automatically, etc.
+    @classmethod
+    def _get_class_that_defined_method(cls, meth):
+        """
+        Returns the class that defines the requested method. For methods that are
+        defined outside of a particular set of Grizzly-defined classes, Grizzly will
+        first evaluate lazy results before forwarding the data to `pandas.Series`.
+        """
+        if inspect.ismethod(meth):
+            for cls in inspect.getmro(meth.__self__.__class__):
+                if cls.__dict__.get(meth.__name__) is meth:
+                    return cls
+        if inspect.isfunction(meth):
+            return getattr(inspect.getmodule(meth),
+                           meth.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
+
+    @classmethod
+    def _requires_forwarding(cls, meth):
+        defined_in = cls._get_class_that_defined_method(meth)
+        if defined_in is not None and defined_in is not cls:
+            return True
+        else:
+            return False
+
+    @classmethod
+    def forward(cls):
+        from functools import wraps
+        def forward_decorator(func):
+            @wraps(func)
+            def forwarding_wrapper(self, *args, **kwargs):
+                print("forwarding {}".format(func.__name__))
+                self.evaluate()
+                return func(self.cached_, *args, **kwargs)
+            return forwarding_wrapper
+        return forward_decorator
+
+    @classmethod
+    def _add_forwarding_methods(cls):
+        methods = dir(cls) 
+        for meth in methods:
+            if meth.startswith("_"):
+                # We only want to do this for API methods.
+                continue
+            attr = getattr(cls, meth)
+            if cls._requires_forwarding(attr):
+                setattr(cls, meth, cls.forward()(attr))
 
     def _arithmetic_binop_impl(self, other, op, truediv=False):
         """
@@ -275,3 +322,5 @@ class GrizzlySeries(pd.Series):
 
     def __repr__(self):
         return str(self)
+
+GrizzlySeries._add_forwarding_methods()
