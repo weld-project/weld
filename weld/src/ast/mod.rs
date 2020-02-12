@@ -13,7 +13,6 @@ pub use self::pretty_print::{PrettyPrint, PrettyPrintConfig};
 pub use self::type_inference::InferTypes;
 pub use self::uniquify::Uniquify;
 
-pub mod constructors;
 pub mod prelude;
 
 mod ast;
