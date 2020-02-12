@@ -1,14 +1,6 @@
 language: rust
 sudo: required
 dist: trusty
-addons:
-  artifacts:
-    paths: results
-    target_paths: master:$TRAVIS_BUILD_NUMBER
-    bucket: weld-travis-ci
-    s3_region: us-west-2
-    key: $AWS_ACCESS_KEY
-    secret: $AWS_SECRET_KEY
 before_install:
 - sudo -E apt-add-repository -y "ppa:deadsnakes/ppa"
 - curl -sSL "https://apt.llvm.org/llvm-snapshot.gpg.key" | sudo -E apt-key add -
@@ -21,13 +13,9 @@ install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
-- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7 python3.6 python-tk
+- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python3.7
 - PATH=$PATH:/home/travis/.cargo/bin
 - sudo -E apt-get -yq update
-- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7
-  # - pip install virtualenv==15.1.0
-  # - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
-  # - git clone https://github.com/weld-project/weld-benchmarks.git
-  # - cd weld-benchmarks; TEST_HOME=`pwd` ./download-data.sh; cd ..
+- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python3.7
 script:
-- bash -e -x .travis/test_multi_version.sh 6.0 60.0.3 2.7
+- bash -e -x .travis/test_multi_version.sh 6.0 60.0.3 3.7
