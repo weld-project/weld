@@ -48,7 +48,6 @@ def test_truediv():
     _test_binop(gr.GrizzlySeries.divide, pd.Series.divide, "divide")
     _test_binop(gr.GrizzlySeries.__truediv__, pd.Series.__truediv__, "__truediv__")
 
-
 def _compare_vs_pandas(func):
     """
     Helper to compare Pandas and Grizzly output. `func`
@@ -71,6 +70,17 @@ def test_arithmetic_expression():
         d = (c + a) * (c + b)
         e = (d / a) - (d / b)
         yield a + b + c * d - e
+    _compare_vs_pandas(eval_expression)
+
+def test_compare_ops():
+    def eval_expression(cls):
+        a = cls([1, np.nan, 3, 4, 6])
+        b = cls([1, np.nan, 2, 5, np.nan])
+        yield a == b
+        yield a > b
+        yield a >= b
+        yield a <= b
+        yield a < b
     _compare_vs_pandas(eval_expression)
 
 def test_float_nan():

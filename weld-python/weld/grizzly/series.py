@@ -242,7 +242,6 @@ class GrizzlySeries(pd.Series):
     #
     # TODO(shoumik): this can probably be refactored a bit, so common arguments
     # added to each of these functions will propagate automatically, etc.
-
     def _arithmetic_binop_impl(self, other, op, truediv=False):
         """
         Performs the operation on two `Series` elementwise.
@@ -259,6 +258,23 @@ class GrizzlySeries(pd.Series):
         lazy = WeldLazy(code, [self.weld_value_, other.weld_value_],
                 WeldVec(output_type), GrizzlySeries._decoder)
         return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(output_type))
+
+    def _compare_binop_impl(self, other, op):
+        """
+        Performs the comparison operation on two `Series` elementwise.
+        """
+        left_ty = self.output_type.elem_type
+        right_ty = other.output_type.elem_type
+        cast_type = wenp.binop_output_type(left_ty, right_ty)
+        code = binary_map(op,
+                left_type=str(left_ty),
+                right_type=str(right_ty),
+                leftval=str(self.weld_value_.id),
+                rightval=str(other.weld_value_.id),
+                cast_type=cast_type)
+        lazy = WeldLazy(code, [self.weld_value_, other.weld_value_],
+                WeldVec(Bool()), GrizzlySeries._decoder)
+        return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(Bool()))
 
     def add(self, other):
         return self._arithmetic_binop_impl(other, '+')
@@ -278,6 +294,21 @@ class GrizzlySeries(pd.Series):
     def div(self, other):
         return self.truediv(other)
 
+    def eq(self, other):
+        return self._compare_binop_impl(other, '==')
+
+    def ge(self, other):
+        return self._compare_binop_impl(other, '>=')
+
+    def gt(self, other):
+        return self._compare_binop_impl(other, '>')
+
+    def le(self, other):
+        return self._compare_binop_impl(other, '<=')
+
+    def lt(self, other):
+        return self._compare_binop_impl(other, '<')
+
     def __add__(self, other):
         return self.add(other)
 
@@ -292,6 +323,21 @@ class GrizzlySeries(pd.Series):
 
     def __divmod__(self, other):
         return self.divmod(other)
+
+    def __eq__(self, other):
+        return self.eq(other)
+
+    def __ge__(self, other):
+        return self.ge(other)
+
+    def __gt__(self, other):
+        return self.gt(other)
+
+    def __le__(self, other):
+        return self.le(other)
+
+    def __lt__(self, other):
+        return self.lt(other)
 
     def __str__(self):
         if self.is_value:
