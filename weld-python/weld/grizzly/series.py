@@ -54,7 +54,7 @@ class GrizzlySeries(pd.Series):
     """
 
     # TODO(shoumik): Does this need to be in _metadata instead?
-    _internal_names = pd.Series._internal_names + ['weld_value_', 'cached_']
+    _internal_names = pd.Series._internal_names + ['weld_value_']
     _internal_names_set = set(_internal_names)
 
     # The encoders and decoders are stateless, so no need to instantiate them
@@ -93,31 +93,63 @@ class GrizzlySeries(pd.Series):
         Evaluation reduces the currently stored computation to a physical value
         by compiling and running a Weld program. If this `GrizzlySeries` refers
         to a physical value and no computation, no program is compiled, and this
-        method does nothing.
-
-        Evaluation results are cached. Subsequent calls to `evaluate()` on this
-        `GrizzlySeries` will return `self` unmodified.
+        method returns `self` unmodified.
 
         """
-        if self.cached_ is None:
+        if not self.is_value:
             result = self.weld_value_.evaluate()
             # TODO(shoumik): it's unfortunate that this copy is needed, but
             # things are breaking without it (even if we hold a reference to
             # the WeldContext). DEBUG ME!
             if isinstance(result[0], wenp.weldbasearray):
-                #super(GrizzlySeries, self).__init__(result[0].copy2numpy())
-                self.cached_ = pd.Series(result[0].copy2numpy())
+                super(GrizzlySeries, self).__init__(result[0].copy2numpy())
             else:
-                self.cached_ = pd.Series(result[0])
-            self.weld_value_ = identity(PhysicalValue(self.cached_.values,\
+                super(GrizzlySeries, self).__init__(result[0])
+            self.weld_value_ = identity(PhysicalValue(self.values,\
                     self.output_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
         return self
 
-    def to_pandas(self):
+    def to_pandas(self, copy=False):
+        """
+        Evaluates this computation and coerces it into a pandas `Series`.
+
+        This is guaranteed to be 0-copy if `self.is_value == True`. Otherwise,
+        some allocation may occur. Regardless, `self` and the returned `Series`
+        will always have the same underlying data unless `copy = True`.
+
+        Parameters
+        ----------
+        copy : boolean, optional
+            Specifies whether the new `Series` should copy data from self
+
+        Examples
+        --------
+        >>> x = GrizzlySeries([1,2,3])
+        >>> res = x + x
+        >>> pandas_res = res.to_pandas()
+        >>> pandas_res
+        0    2
+        1    4
+        2    6
+        dtype: int64
+        >>> res # Also evaluated now
+        0    2
+        1    4
+        2    6
+        dtype: int64
+        >>> res.values is pandas_res.values
+        True
+        >>> pandas_res = res.to_pandas(copy=True)
+        >>> res.values is pandas_res.values
+        False
+        """
         self.evaluate()
-        assert self.cached_ is not None
-        return self.cached_
+        assert self.is_value
+        return pd.Series(data=self.array,
+                index=self.index,
+                copy=copy,
+                fastpath=True)
 
     # ------------- pd.Series methods required for subclassing ----------
 
@@ -168,14 +200,6 @@ class GrizzlySeries(pd.Series):
         >>> x = GrizzlySeries(np.ones(5))
         >>> x.__class__
         <class 'weld.grizzly.series.GrizzlySeries'>
-        >>> z = GrizzlySeries([1, 2, 3], dtype='int16') # Unsupported
-        >>> z
-        0    1
-        1    2
-        2    3
-        dtype: int16
-        >>> z.__class__
-        <class 'weld.grizzly.series.GrizzlySeries'>
         >>> y = GrizzlySeries(['hi', 'bye']) # Unsupported
         >>> y.__class__
         <class 'pandas.core.series.Series'>
@@ -188,7 +212,6 @@ class GrizzlySeries(pd.Series):
             self = super(GrizzlySeries, cls).__new__(cls)
             super(GrizzlySeries, self).__init__(None, dtype=dtype, **kwargs)
             self.weld_value_ = data
-            self.cached_ = None
             return self
         elif len(kwargs) != 0:
             return pd.Series(data, **kwargs)
@@ -205,7 +228,6 @@ class GrizzlySeries(pd.Series):
             self.weld_value_ = identity(
                     PhysicalValue(data, weld_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
-            self.cached_ = None
             return self
         # Don't re-convert values if we did it once already -- it's expensive.
         return s if s is not None else pd.Series(data, **kwargs)
@@ -214,51 +236,6 @@ class GrizzlySeries(pd.Series):
     #
     # TODO(shoumik): this can probably be refactored a bit, so common arguments
     # added to each of these functions will propagate automatically, etc.
-    @classmethod
-    def _get_class_that_defined_method(cls, meth):
-        """
-        Returns the class that defines the requested method. For methods that are
-        defined outside of a particular set of Grizzly-defined classes, Grizzly will
-        first evaluate lazy results before forwarding the data to `pandas.Series`.
-        """
-        if inspect.ismethod(meth):
-            for cls in inspect.getmro(meth.__self__.__class__):
-                if cls.__dict__.get(meth.__name__) is meth:
-                    return cls
-        if inspect.isfunction(meth):
-            return getattr(inspect.getmodule(meth),
-                           meth.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
-
-    @classmethod
-    def _requires_forwarding(cls, meth):
-        defined_in = cls._get_class_that_defined_method(meth)
-        if defined_in is not None and defined_in is not cls:
-            return True
-        else:
-            return False
-
-    @classmethod
-    def forward(cls):
-        from functools import wraps
-        def forward_decorator(func):
-            @wraps(func)
-            def forwarding_wrapper(self, *args, **kwargs):
-                print("forwarding {}".format(func.__name__))
-                self.evaluate()
-                return func(self.cached_, *args, **kwargs)
-            return forwarding_wrapper
-        return forward_decorator
-
-    @classmethod
-    def _add_forwarding_methods(cls):
-        methods = dir(cls) 
-        for meth in methods:
-            if meth.startswith("_"):
-                # We only want to do this for API methods.
-                continue
-            attr = getattr(cls, meth)
-            if cls._requires_forwarding(attr):
-                setattr(cls, meth, cls.forward()(attr))
 
     def _arithmetic_binop_impl(self, other, op, truediv=False):
         """
@@ -312,9 +289,8 @@ class GrizzlySeries(pd.Series):
 
     def __str__(self):
         if self.is_value:
-            self.evaluate()
-        if self.cached_ is not None:
-            return str(self.cached_)
+            # This is guaranteed to be 0-copy.
+            return str(self.to_pandas())
         return "GrizzlySeries({}, dtype: {}, deps: [{}])".format(
                 self.weld_value_.expression,
                 str(wenp.weld_type_to_dtype(self.output_type.elem_type)),
@@ -323,4 +299,52 @@ class GrizzlySeries(pd.Series):
     def __repr__(self):
         return str(self)
 
+    # ---------------------- Method forwarding setup ------------------------------
+
+    @classmethod
+    def _get_class_that_defined_method(cls, meth):
+        """
+        Returns the class that defines the requested method. For methods that are
+        defined outside of a particular set of Grizzly-defined classes, Grizzly will
+        first evaluate lazy results before forwarding the data to `pandas.Series`.
+        """
+        if inspect.ismethod(meth):
+            for cls in inspect.getmro(meth.__self__.__class__):
+                if cls.__dict__.get(meth.__name__) is meth:
+                    return cls
+        if inspect.isfunction(meth):
+            return getattr(inspect.getmodule(meth),
+                           meth.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
+
+    @classmethod
+    def _requires_forwarding(cls, meth):
+        defined_in = cls._get_class_that_defined_method(meth)
+        if defined_in is not None and defined_in is not cls:
+            return True
+        else:
+            return False
+
+    @classmethod
+    def forward(cls):
+        from functools import wraps
+        def forward_decorator(func):
+            @wraps(func)
+            def forwarding_wrapper(self, *args, **kwargs):
+                self.evaluate()
+                return func(self, *args, **kwargs)
+            return forwarding_wrapper
+        return forward_decorator
+
+    @classmethod
+    def _add_forwarding_methods(cls):
+        methods = dir(cls) 
+        for meth in methods:
+            if meth.startswith("_"):
+                # We only want to do this for API methods.
+                continue
+            attr = getattr(cls, meth)
+            if cls._requires_forwarding(attr):
+                setattr(cls, meth, cls.forward()(attr))
+
+# Wrap public API methods for forwarding
 GrizzlySeries._add_forwarding_methods()
