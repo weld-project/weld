@@ -211,10 +211,10 @@ fn fold_constants_in_function(
                 _ => None,
             };
 
-            if replacement_lit.is_some() {
+            if let Some(val) = replacement_lit {
                 // If this is true, we computed a constant value for this statement. Replace it
                 // with that constant value.
-                let kind = AssignLiteral(replacement_lit.unwrap());
+                let kind = AssignLiteral(val);
                 let new_statement = Statement::new(statement.output.clone(), kind);
                 *statement = new_statement;
             } else {

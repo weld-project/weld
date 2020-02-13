@@ -1,7 +1,6 @@
 //! Transforms which fuse loops to reduce memory movement and prevent unncessary
 //! traversals of data.
 
-use crate::ast::constructors;
 use crate::ast::BuilderKind::*;
 use crate::ast::ExprKind::*;
 use crate::ast::LiteralKind::*;
@@ -153,7 +152,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                         annotations: Annotations::new(),
                     };
                     let new_elem_expr = Expr {
-                        ty: func_elem_type.clone(),
+                        ty: func_elem_type,
                         kind: Ident(new_params[2].name.clone()),
                         annotations: Annotations::new(),
                     };
@@ -203,14 +202,14 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                         annotations: Annotations::new(),
                     };
                     let new_iter_expr = Expr {
-                        ty: Vector(Box::new(merge_type.clone())),
+                        ty: Vector(Box::new(merge_type)),
                         kind: Res {
                             builder: Box::new(Expr {
                                 ty: builder_type.clone(),
                                 kind: For {
                                     iters: common_data.unwrap(),
                                     builder: Box::new(Expr {
-                                        ty: builder_type.clone(),
+                                        ty: builder_type,
                                         kind: NewBuilder(None),
                                         annotations: Annotations::new(),
                                     }),
@@ -274,11 +273,10 @@ pub fn fuse_loops_vertical(expr: &mut Expr) {
                             if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
-                                        let mut e = constructors::for_expr(
+                                        let mut e = Expr::new_for(
                                             iters2.clone(),
                                             *bldr1.clone(),
                                             replace_builder(lambda, nested, &mut sym_gen)?,
-                                            false,
                                         )?;
                                         e.annotations = expr.annotations.clone();
                                         return Ok((Some(e), true));
@@ -371,10 +369,8 @@ fn replace_builder(
             let old_arg = &args[2];
             let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name());
             let new_index_sym = sym_gen.new_symbol(&old_index.name.name());
-            let new_bldr =
-                constructors::ident_expr(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
-            let new_index =
-                constructors::ident_expr(new_index_sym.clone(), nested_args[1].ty.clone())?;
+            let new_bldr = Expr::new_ident(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
+            let new_index = Expr::new_ident(new_index_sym.clone(), nested_args[1].ty.clone())?;
 
             // Fix expressions to use the new builder.
             new_body.transform_and_continue_res(&mut |ref mut e| match e.kind {
@@ -384,7 +380,7 @@ fn replace_builder(
                 } if same_iden(&(*builder).kind, &old_bldr.name) => {
                     let params: Vec<Expr> =
                         vec![new_bldr.clone(), new_index.clone(), *value.clone()];
-                    let mut expr = constructors::apply_expr(nested.clone(), params)?;
+                    let mut expr = Expr::new_apply(nested.clone(), params)?;
                     inline_apply(&mut expr);
                     Ok((Some(expr), true))
                 }
@@ -393,11 +389,10 @@ fn replace_builder(
                     builder: ref bldr,
                     ref func,
                 } if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                    let expr = constructors::for_expr(
+                    let expr = Expr::new_for(
                         data.clone(),
                         new_bldr.clone(),
                         replace_builder(func, nested, sym_gen)?,
-                        false,
                     )?;
                     Ok((Some(expr), false))
                 }
@@ -415,19 +410,19 @@ fn replace_builder(
 
             let new_params = vec![
                 Parameter {
-                    ty: new_bldr.ty.clone(),
-                    name: new_bldr_sym.clone(),
+                    ty: new_bldr.ty,
+                    name: new_bldr_sym,
                 },
                 Parameter {
                     ty: Scalar(ScalarKind::I64),
-                    name: new_index_sym.clone(),
+                    name: new_index_sym,
                 },
                 Parameter {
                     ty: old_arg.ty.clone(),
                     name: old_arg.name.clone(),
                 },
             ];
-            return constructors::lambda_expr(new_params, new_body);
+            return Expr::new_lambda(new_params, new_body);
         }
     }
     return compile_err!("Inconsistency in replace_builder");

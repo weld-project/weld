@@ -594,7 +594,7 @@ impl<'t> Parser<'t> {
                 Ok(iter)
             }
             TRangeIter => {
-                self.consume(iter.clone())?;
+                self.consume(iter)?;
                 self.consume(TOpenParen)?;
                 let start = self.expr()?;
                 self.consume(TComma)?;
@@ -1116,11 +1116,7 @@ impl<'t> Parser<'t> {
 
                 let mut expr = expr_box(NewBuilder(arg), Annotations::new());
                 expr.ty = Builder(
-                    DictMerger(
-                        Box::new(key_type.clone()),
-                        Box::new(value_type.clone()),
-                        bin_op,
-                    ),
+                    DictMerger(Box::new(key_type), Box::new(value_type), bin_op),
                     annotations,
                 );
                 Ok(expr)
@@ -1136,7 +1132,7 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseBracket)?;
                 let mut expr = expr_box(NewBuilder(None), Annotations::new());
                 expr.ty = Builder(
-                    GroupMerger(Box::new(key_type.clone()), Box::new(value_type.clone())),
+                    GroupMerger(Box::new(key_type), Box::new(value_type)),
                     annotations,
                 );
                 Ok(expr)
@@ -1154,7 +1150,7 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
 
                 let mut expr = expr_box(NewBuilder(Some(expr)), Annotations::new());
-                expr.ty = Builder(VecMerger(Box::new(elem_type.clone()), bin_op), annotations);
+                expr.ty = Builder(VecMerger(Box::new(elem_type), bin_op), annotations);
                 Ok(expr)
             }
 
@@ -1354,11 +1350,7 @@ impl<'t> Parser<'t> {
                 let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
                 Ok(Builder(
-                    DictMerger(
-                        Box::new(key_type.clone()),
-                        Box::new(value_type.clone()),
-                        binop,
-                    ),
+                    DictMerger(Box::new(key_type), Box::new(value_type), binop),
                     annotations,
                 ))
             }
@@ -1381,10 +1373,7 @@ impl<'t> Parser<'t> {
                 let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
 
-                Ok(Builder(
-                    VecMerger(Box::new(elem_type.clone()), binop),
-                    annotations,
-                ))
+                Ok(Builder(VecMerger(Box::new(elem_type), binop), annotations))
             }
 
             TOpenBrace => {

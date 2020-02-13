@@ -139,7 +139,6 @@
 //!
 //! This is our final CSE'd output.
 
-use crate::ast::constructors::*;
 use crate::ast::ExprKind::*;
 use crate::ast::*;
 
@@ -649,7 +648,7 @@ impl Cse {
         // top-down.
         for (sym, expr) in binding_list.into_iter().rev() {
             generated.remove(&sym);
-            prev = let_expr(sym, expr, prev).unwrap();
+            prev = Expr::new_let(sym, expr, prev).unwrap();
         }
 
         current_site.pop();

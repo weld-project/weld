@@ -6,7 +6,6 @@
 
 use std::collections::HashSet;
 
-use crate::ast::constructors;
 use crate::ast::ExprKind::*;
 use crate::ast::Type::*;
 use crate::ast::*;
@@ -64,7 +63,7 @@ pub fn vectorize(expr: &mut Expr) {
                     let mut vectorized_params = params.clone();
                     vectorized_params[2].ty = vectorized_params[2].ty.simd_type()?;
 
-                    let vec_func = constructors::lambda_expr(vectorized_params, *vectorized_body)?;
+                    let vec_func = Expr::new_lambda(vectorized_params, *vectorized_body)?;
 
                     let data_names = iters
                         .iter()
@@ -75,7 +74,7 @@ pub fn vectorize(expr: &mut Expr) {
                     let mut vec_iters = vec![];
                     for (e, n) in iters.iter().zip(&data_names) {
                         vec_iters.push(Iter {
-                            data: Box::new(constructors::ident_expr(n.clone(), e.data.ty.clone())?),
+                            data: Box::new(Expr::new_ident(n.clone(), e.data.ty.clone())?),
                             start: e.start.clone(),
                             end: e.end.clone(),
                             stride: e.stride.clone(),
@@ -97,17 +96,11 @@ pub fn vectorize(expr: &mut Expr) {
                         .collect();
 
                     let vectorized_loop =
-                        constructors::for_expr(vec_iters, *init_builder.clone(), vec_func, true)?;
-                    let scalar_loop = constructors::for_expr(
-                        fringe_iters,
-                        vectorized_loop,
-                        *func.clone(),
-                        false,
-                    )?;
+                        Expr::new_for(vec_iters, *init_builder.clone(), vec_func)?;
+                    let scalar_loop = Expr::new_for(fringe_iters, vectorized_loop, *func.clone())?;
                     let mut prev_expr = scalar_loop;
                     for (iter, name) in iters.iter().zip(data_names).rev() {
-                        prev_expr =
-                            constructors::let_expr(name.clone(), *iter.data.clone(), prev_expr)?;
+                        prev_expr = Expr::new_let(name.clone(), *iter.data.clone(), prev_expr)?;
                     }
 
                     vectorized = true;
@@ -120,7 +113,8 @@ pub fn vectorize(expr: &mut Expr) {
     });
 }
 
-/// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
+/// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to
+/// merge(b, select(cond, e,identity)).
 pub fn predicate_merge_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
         if !e.should_predicate() {
@@ -161,9 +155,9 @@ pub fn predicate_merge_expr(e: &mut Expr) {
                                             | BuilderKind::VecMerger(_, _) => {
                                                 /* Change if(cond, merge(b, e), b) =>
                                                 merge(b, select(cond, e, identity). */
-                                                let expr = constructors::merge_expr(
+                                                let expr = Expr::new_merge(
                                                     *builder.clone(),
-                                                    constructors::select_expr(
+                                                    Expr::new_select(
                                                         *cond.clone(),
                                                         *value.clone(),
                                                         x,
@@ -244,11 +238,8 @@ pub fn predicate_simple_expr(e: &mut Expr) {
 
             if let Scalar(_) = on_true.ty {
                 if let Scalar(_) = on_false.ty {
-                    let expr = constructors::select_expr(
-                        *cond.clone(),
-                        *on_true.clone(),
-                        *on_false.clone(),
-                    )?;
+                    let expr =
+                        Expr::new_select(*cond.clone(), *on_true.clone(), *on_false.clone())?;
                     return Ok((Some(expr), true));
                 }
             }
@@ -287,7 +278,7 @@ fn vectorize_expr(e: &mut Expr, broadcast_idens: &HashSet<Symbol>) -> WeldResult
                 //  it into a vector.
                 if broadcast_idens.contains(&name) {
                     // Don't continue if we replace this expression.
-                    new_expr = Some(constructors::broadcast_expr(e.clone())?);
+                    new_expr = Some(Expr::new_broadcast(e.clone())?);
                     cont = false;
                 } else {
                     e.ty = e.ty.simd_type()?;
@@ -314,8 +305,8 @@ fn vectorize_expr(e: &mut Expr, broadcast_idens: &HashSet<Symbol>) -> WeldResult
         _ => {}
     }
 
-    if new_expr.is_some() {
-        *e = new_expr.unwrap();
+    if let Some(val) = new_expr {
+        *e = val;
     }
     Ok(cont)
 }
@@ -478,21 +469,21 @@ fn get_id_element(ty: &Type, op: BinOpKind) -> WeldResult<Option<Expr>> {
     /* Dummy element to merge when predicate fails. */
     let identity = match op {
         BinOpKind::Add => match *sk {
-            ScalarKind::I8 => constructors::literal_expr(LiteralKind::I8Literal(0))?,
-            ScalarKind::I32 => constructors::literal_expr(LiteralKind::I32Literal(0))?,
-            ScalarKind::I64 => constructors::literal_expr(LiteralKind::I64Literal(0))?,
-            ScalarKind::F32 => constructors::literal_expr(LiteralKind::F32Literal(0f32.to_bits()))?,
-            ScalarKind::F64 => constructors::literal_expr(LiteralKind::F64Literal(0f64.to_bits()))?,
+            ScalarKind::I8 => Expr::new_literal(LiteralKind::I8Literal(0))?,
+            ScalarKind::I32 => Expr::new_literal(LiteralKind::I32Literal(0))?,
+            ScalarKind::I64 => Expr::new_literal(LiteralKind::I64Literal(0))?,
+            ScalarKind::F32 => Expr::new_literal(LiteralKind::F32Literal(0f32.to_bits()))?,
+            ScalarKind::F64 => Expr::new_literal(LiteralKind::F64Literal(0f64.to_bits()))?,
             _ => {
                 return Ok(None);
             }
         },
         BinOpKind::Multiply => match *sk {
-            ScalarKind::I8 => constructors::literal_expr(LiteralKind::I8Literal(1))?,
-            ScalarKind::I32 => constructors::literal_expr(LiteralKind::I32Literal(1))?,
-            ScalarKind::I64 => constructors::literal_expr(LiteralKind::I64Literal(1))?,
-            ScalarKind::F32 => constructors::literal_expr(LiteralKind::F32Literal(1f32.to_bits()))?,
-            ScalarKind::F64 => constructors::literal_expr(LiteralKind::F64Literal(1f64.to_bits()))?,
+            ScalarKind::I8 => Expr::new_literal(LiteralKind::I8Literal(1))?,
+            ScalarKind::I32 => Expr::new_literal(LiteralKind::I32Literal(1))?,
+            ScalarKind::I64 => Expr::new_literal(LiteralKind::I64Literal(1))?,
+            ScalarKind::F32 => Expr::new_literal(LiteralKind::F32Literal(1f32.to_bits()))?,
+            ScalarKind::F64 => Expr::new_literal(LiteralKind::F64Literal(1f64.to_bits()))?,
             _ => {
                 return Ok(None);
             }
@@ -508,14 +499,11 @@ fn make_select_for_kv(cond: Expr, kv: Expr, ident: Expr) -> WeldResult<Option<Ex
     let mut sym_gen = SymbolGenerator::from_expression(&kv);
     let name = sym_gen.new_symbol("k");
 
-    let kv_struct = constructors::ident_expr(name.clone(), kv.ty.clone())?;
-    let kv_ident = constructors::makestruct_expr(vec![
-        constructors::getfield_expr(kv_struct.clone(), 0)?,
-        ident,
-    ])?; // use the original key and the identity as the value
+    let kv_struct = Expr::new_ident(name.clone(), kv.ty.clone())?;
+    let kv_ident = Expr::new_make_struct(vec![Expr::new_get_field(kv_struct.clone(), 0)?, ident])?; // use the original key and the identity as the value
 
-    let sel = constructors::select_expr(cond, kv_struct, kv_ident)?;
-    let le = constructors::let_expr(name, kv, sel)?; /* avoid copying key */
+    let sel = Expr::new_select(cond, kv_struct, kv_ident)?;
+    let le = Expr::new_let(name, kv, sel)?; /* avoid copying key */
     Ok(Some(le))
 }
 

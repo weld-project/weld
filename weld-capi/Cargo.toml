@@ -1,6 +1,6 @@
 [package]
 name = "weld-capi"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Shoumik Palkar <shoumik@cs.stanford.edu>"]
 edition = "2018"
 readme = "README.md"
