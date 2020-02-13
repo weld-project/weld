@@ -17,14 +17,6 @@ export WELD_HOME=`pwd`
 # set llvm-sys crate version
 sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 
-# build and test
-cargo clippy
-cargo fmt -- --check
-# Make sure the release build works.
-cargo build --release
-# Test uses the debug build.
-cargo test
-
 # Python Tests
 # ----------------------------------------------------------
 
@@ -34,7 +26,7 @@ source travis-test-env/bin/activate
 cd weld-python
 
 pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+pip install numpy pandas pytest setuptools-rust
 
 # Install Rust Requirements
 rustup toolchain install nightly
