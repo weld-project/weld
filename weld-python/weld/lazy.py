@@ -41,6 +41,13 @@ class WeldNode(ABC):
         """ The Weld output type of this node. """
         pass
 
+    @abstractmethod
+    def evaluate(self):
+        """
+        Return a concrete result from this Weld computation.
+        """
+        pass
+
 
     # ---------------------- Provided Methods ------------------------------
 
@@ -151,6 +158,9 @@ class PhysicalValue(WeldNode):
     def output_type(self):
         return self.ty_
 
+    def evaluate(self):
+        return value
+
 class WeldLazy(WeldNode):
     """
     A lazy value that encapsulates a Weld computation.
@@ -178,19 +188,46 @@ class WeldLazy(WeldNode):
         self.decoder = decoder
         self.ty_ = ty
 
+        # Cache the compiled program.
+        self.program_ = None
+
     @property
     def children(self):
         return self.children_
 
     @property
+    def num_dependencies(self):
+        """
+        Returns the total number of dependencies this computation relies on.
+        This does not count `self` as a dependency.
+        """
+        def increment(node, count):
+            count[0] += 1
+        count = [0]
+        self.walk(increment, count)
+        return count[0] - 1
+
+    @property
     def output_type(self):
         return self.ty_
+
+    @property
+    def is_identity(self):
+        return len(self.children) == 1 and isinstance(self.children[0], PhysicalValue)
 
     def _create_function_header(self, inputs):
         arguments = ["{0}: {1}".format(inp.id, str(inp.output_type)) for inp in inputs]
         return "|" + ", ".join(arguments) + "|"
 
     def evaluate(self):
+        if self.is_identity:
+            # This is a physical value -- return an empty context. The physical value
+            # should manage its own context if its owned by Weld.
+            return (self.children[0].value, None)
+        elif self.program_ is not None:
+            # If we compiled once already, use the pre-compiled program.
+            return (self.program_)(*values)
+
         # Collect nodes in execution order.
         nodes_to_execute = []
         self.walk(lambda node, expressions: expressions.append(node), nodes_to_execute)
@@ -204,13 +241,17 @@ class WeldLazy(WeldNode):
 
         # Collect the expressions from the remaining nodes.
         expressions = [
-                "let {name} = ({expr});".format(name=node.id, expr=node.expression) for node in nodes_to_execute if isinstance(node, WeldLazy)]
+                "let {name} = ({expr});".format(name=node.id, expr=node.expression)\
+                        for node in nodes_to_execute if isinstance(node, WeldLazy)]
         assert nodes_to_execute[-1] is self
         expressions.append(str(self.id))
 
         program = self._create_function_header(inputs) + " " + "\n".join(expressions)
-        print(program)
+        self.program_ = weld.compile.compile(program, arg_types, encoders, self.output_type, self.decoder)
+        return (self.program_)(*values)
 
-        # TODO(shoumik): cache me!
-        program = weld.compile.compile(program, arg_types, encoders, self.output_type, self.decoder)
-        return program(*values)
+def identity(phys_value, decoder):
+    """
+    Creates an identity `WeldLazy` from a `PhysicalValue` and decoder.
+    """
+    return WeldLazy(str(phys_value.id), [phys_value], phys_value.output_type, decoder)

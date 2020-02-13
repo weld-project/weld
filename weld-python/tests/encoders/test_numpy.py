@@ -8,7 +8,7 @@ import numpy as np
 from .helpers import encdec_factory
 
 from weld import WeldConf, WeldContext
-from weld.encoders.numpy import weldbasearray, NumPyWeldEncoder, NumPyWeldDecoder
+from weld.encoders.numpy import *
 from weld.types import *
 
 encdec = encdec_factory(NumPyWeldEncoder, NumPyWeldDecoder, eq=np.allclose)
@@ -98,3 +98,19 @@ def test_float32_vec():
 
 def test_float64_vec():
     encdec(array('float64'), WeldVec(F64()))
+
+def test_type_conversions():
+    types = ['bool', 'int8', 'uint8', 'int16', 'uint16',
+            'int32', 'uint32', 'int64', 'uint64', 'float32', 'float64']
+    for left in types:
+        for right in types:
+            print ("testing {}, {}".format(left, right))
+            larr = np.ones(1, dtype=left)
+            rarr = np.ones(1, dtype=right)
+            left_weld_type = dtype_to_weld_type(left)
+            right_weld_type = dtype_to_weld_type(right)
+            got = binop_output_type(left_weld_type, right_weld_type)
+            got = weld_type_to_dtype(got)
+            expected = (larr + rarr).dtype
+            assert expected == got, "input: {} {}, expected: {}, got: {}".format(
+                    left, right, expected, got)

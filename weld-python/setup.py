@@ -5,7 +5,7 @@ from setuptools import setup
 from setuptools_rust import RustExtension
 
 setup_requires = ["setuptools-rust>=0.10.1", "wheel"]
-install_requires = ["numpy"]
+install_requires = ["numpy", "pandas"]
 
 setup(
     name="weld",
@@ -20,8 +20,8 @@ setup(
     ],
     packages=["weld"],
     rust_extensions=[RustExtension("weld.core")],
-    install_requires=install_requires,
     setup_requires=setup_requires,
+    install_requires=install_requires,
     include_package_data=True,
     zip_safe=False,
 )

@@ -1,33 +1,32 @@
-language: rust
-sudo: required
-dist: trusty
+language: python
+
+dist: xenial
+
+cache:
+  pip: true
+  cargo: true
+
+env:
+  global:
+    - RUST_BACKTRACE=1
+
 addons:
-  artifacts:
-    paths: results
-    target_paths: master:$TRAVIS_BUILD_NUMBER
-    bucket: weld-travis-ci
-    s3_region: us-west-2
-    key: $AWS_ACCESS_KEY
-    secret: $AWS_SECRET_KEY
+  apt:
+    packages:
+      - libssl-dev
+      - lib32z1-dev
+      - gcc
+      - make
+
+python: "3.7"
+
 before_install:
-- sudo -E apt-add-repository -y "ppa:deadsnakes/ppa"
-- curl -sSL "https://apt.llvm.org/llvm-snapshot.gpg.key" | sudo -E apt-key add -
-- echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main" | sudo tee -a /etc/apt/sources.list >/dev/null
-- curl -sSL "https://build.travis-ci.org/files/gpg/travis-security.asc" | sudo -E apt-key add -
-- echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main" | sudo tee -a /etc/apt/sources.list >/dev/null
-install:
-- rustup component add rustfmt
-- rustup component add clippy
-- sudo rm -f `which llvm-config`
-- export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
-- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7 python3.6 python-tk
-- PATH=$PATH:/home/travis/.cargo/bin
-- sudo -E apt-get -yq update
-- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7
-  # - pip install virtualenv==15.1.0
-  # - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
-  # - git clone https://github.com/weld-project/weld-benchmarks.git
-  # - cd weld-benchmarks; TEST_HOME=`pwd` ./download-data.sh; cd ..
+- source .travis/llvm.sh 6.0 xenial
+- source .travis/rust.sh
+
+install:
+  - pip install setuptools-rust numpy pandas pytest
+
 script:
-- bash -e -x .travis/test_multi_version.sh 6.0 60.0.3 2.7
+- bash -e -x .travis/test_multi_version.sh 6.0 3.7

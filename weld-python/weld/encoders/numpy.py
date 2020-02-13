@@ -96,6 +96,105 @@ _known_types = {
 # Reverse of the above.
 _known_types_weld2dtype = {v: k for k, v in _known_types.items()}
 
+def binop_output_type(left_ty, right_ty, truediv=False):
+    """
+    Returns the output type when applying an arithmetic binary operator
+    with the given input types.
+
+    Parameters
+    ----------
+    left_ty : WeldType
+    right_ty : WeldType
+    truediv: boolean
+        Division has some special rules.
+
+    Returns
+    -------
+    WeldType
+
+    Examples
+    --------
+    >>> binop_output_type(Bool(), Bool())
+    <weld.types.Bool object at ...>
+    >>> binop_output_type(I8(), U16())
+    <weld.types.I32 object at ...>
+    >>> binop_output_type(U8(), U16())
+    <weld.types.U16 object at ...>
+    >>> binop_output_type(F32(), U16())
+    <weld.types.F32 object at ...>
+    >>> binop_output_type(I8(), U64())
+    <weld.types.F64 object at ...>
+    """
+    if not truediv and left_ty == right_ty:
+        return left_ty
+    if truediv and left_ty == F32() and right_ty == F32():
+        return F32()
+
+    size_to_ty = [(ty.size, ty) for ty in _known_types.values()]
+    float_types = set([F32(), F64()])
+    int_types = set([I8(), I16(), I32(), I64()])
+    uint_types = set([U8(), U16(), U32(), U64()])
+
+    left_size = left_ty.size
+    right_size = right_ty.size
+    max_size = max([left_size, right_size])
+    has_float = left_ty in float_types or right_ty in float_types
+    both_uint = left_ty in uint_types and right_ty in uint_types
+    both_int = left_ty in int_types and right_ty in int_types
+
+    if has_float: 
+        if max_size <= 4:
+            if left_size != right_size:
+                # float and something smaller: use float
+                return F32()
+            else:
+                # two floats: use double
+                return F64()
+        # one input is a double: use double.
+        return F64()
+    elif truediv:
+        return F64()
+    else:
+        # Rule here is to use the biggest type if the two types have different
+        # sizes, or to use one (signed) bigger size if they have the same size
+        # (but are different types, e.g., 'i8' and 'u8').
+
+        if left_ty == Bool():
+            return right_ty
+        elif right_ty == Bool():
+            return left_ty
+
+        if both_uint or both_int:
+            if left_size > right_size:
+                return left_ty
+            elif right_size > left_size:
+                return right_ty
+            # Sizes are same
+            elif max_size == 1:
+                return U16() if both_uint else I16()
+            elif max_size == 2:
+                return U32() if both_uint else I32()
+            else:
+                return U64() if both_uint else I64()
+        else:
+            # Use the int if its bigger, otherwise use one int
+            # bigger than max size.
+            if left_size != right_size:
+                if left_ty in int_types and max_size == left_size:
+                    return left_ty
+                elif right_ty in int_types and max_size == right_size:
+                    return right_ty
+            if max_size == 1:
+                return I16()
+            elif max_size == 2:
+                return I32()
+            elif max_size == 4:
+                return I64()
+            else:
+                # For higher precisions, always cast to f64.
+                return F64()
+
+
 def weld_type_to_dtype(ty):
     """Converts a Weld type to a NumPy dtype.
 
@@ -152,20 +251,13 @@ def dtype_to_weld_type(ty):
 
     Returns
     -------
-    WeldType
+    WeldType, or None if dtype not supported.
 
     """
     if not isinstance(ty, np.dtype):
         ty = np.dtype(ty)
-
     ty = str(ty)
-    if ty in _known_types:
-        return _known_types.get(ty)
-
-    if ty.startswith('S'):
-        raise TypeError("Python 2 strings not supported -- use Unicode")
-    if ty.find('U') != -1:
-        raise NotImplementedError("Unicode strings not yet supported")
+    return _known_types.get(ty)
 
 class NumPyWeldEncoder(WeldEncoder):
 
