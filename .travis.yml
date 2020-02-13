@@ -29,4 +29,4 @@ install:
   - pip install setuptools-rust numpy pandas pytest
 
 script:
-- bash -e -x .travis/test_multi_version.sh 6.0 60.0.3 3.7
+- source .travis/test_multi_version.sh 6.0 60.0.3 3.7

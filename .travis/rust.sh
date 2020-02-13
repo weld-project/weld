@@ -2,7 +2,7 @@
 
 set -e
 
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl https://sh.rustup.rs -sSf | sh -s -- -y
 export PATH=$PATH:$HOME/.cargo/bin
 
 # For Python tests.
