@@ -15,7 +15,7 @@ sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 # Python Tests
 # ----------------------------------------------------------
 
-# Install Rust Requirements
+# Install Python Requirements
 rustup default nightly
 pushd weld-python/
 pip install -e .

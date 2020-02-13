@@ -1,6 +1,6 @@
 language: python
 
-dist: trusty
+dist: xenial
 
 cache:
   pip: true
@@ -13,6 +13,7 @@ env:
 addons:
   apt:
     packages:
+      - libssl-dev
       - lib32z1-dev
       - gcc
       - make
@@ -21,7 +22,7 @@ python: "3.7"
 
 before_install:
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
-- source .travis/llvm.sh 6.0 trusty
+- source .travis/llvm.sh 6.0 xenial
 - source .travis/rust.sh
 
 install:
