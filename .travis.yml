@@ -13,7 +13,7 @@ install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
-- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install libssl-dev gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python3.7
+- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install libssl-dev gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python3.7 python3.7-venv
 - PATH=$PATH:/home/travis/.cargo/bin
 script:
 - bash -e -x .travis/test_multi_version.sh 6.0 60.0.3 3.7
