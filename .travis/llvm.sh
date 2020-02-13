@@ -15,11 +15,7 @@ curl -sSL "https://build.travis-ci.org/files/gpg/travis-security.asc"\
 echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $DIST main"\
   | sudo tee -a /etc/apt/sources.list > /dev/null
 
-sudo -E apt-get\
-  --no-install-suggests\
-  --no-install-recommends\
-  -qy\
-  --allow-unauthenticated\ install\
+sudo -E apt-get -qy --allow-unauthenticated install\
   gcc make llvm-$LLVM_VERSION llvm-$LLVM_VERSION-dev clang-$LLVM_VERSION lib32z1-dev
 
 which llvm-config

@@ -5,7 +5,7 @@
 LLVM_VERSION=$1
 PYTHON_VERSION=$2
 
-export LLVM_SYS_60_PREFIX=$(llvm-config-$LLVM_VERISON --libdir)
+export LLVM_SYS_60_PREFIX=$(llvm-config-$LLVM_VERSION --libdir)
 
 # Weld Core Tests
 # ----------------------------------------------------------
