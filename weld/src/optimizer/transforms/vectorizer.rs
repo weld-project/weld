@@ -310,8 +310,8 @@ fn vectorize_expr(e: &mut Expr, broadcast_idens: &HashSet<Symbol>) -> WeldResult
         _ => {}
     }
 
-    if new_expr.is_some() {
-        *e = new_expr.unwrap();
+    if let Some(val) = new_expr {
+        *e = val;
     }
     Ok(cont)
 }

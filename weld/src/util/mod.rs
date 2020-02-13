@@ -37,7 +37,7 @@ impl SymbolGenerator {
         let mut id_map: fnv::FnvHashMap<String, i32> = fnv::FnvHashMap::default();
 
         let update_id = |id_map: &mut fnv::FnvHashMap<String, i32>, symbol: &Symbol| {
-            let id = id_map.entry(symbol.name().clone()).or_insert(0);
+            let id = id_map.entry(symbol.name()).or_insert(0);
             *id = max(*id, symbol.id());
         };
 

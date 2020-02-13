@@ -111,24 +111,27 @@ pub fn infer_size(expr: &mut Expr) {
                         };
 
                         if let Some(newbuilder) = newbuilder_with_size(builder, length) {
-                            if data_expr.is_none() {
-                                /* here, we do not change anything in the expression besides the
-                                 * builder - so we don't need to create a new expression to return.
-                                 * Since we have a mutable reference to the builder, we can change
-                                 * it directly. */
-                                *builder = Box::new(newbuilder);
-                            } else {
-                                /* Here, we need to modify the expression itself - because we need
-                                 * to add a let statement. It doesn't seem possible to just modify
-                                 * it directly, as we did with the builder, so we create and return
-                                 * a new expression -- which transform_up will replace expr with */
-                                let orig_data = iters[0].data.clone();
-                                iters[0].data = Box::new(data_expr.clone().unwrap());
-                                let mut new_loop = Expr::new_for(iters.clone(), newbuilder,
-                                                      func.as_ref().clone()).unwrap();
-                                new_loop = Expr::new_let(data_sym.clone(), *orig_data, new_loop).unwrap();
-                                /* returning from the lambda function we passed to transform_up */
-                                return Some(new_loop);
+                            match data_expr {
+                                None => {
+                                    /* here, we do not change anything in the expression besides the
+                                     * builder - so we don't need to create a new expression to return.
+                                     * Since we have a mutable reference to the builder, we can change
+                                     * it directly. */
+                                    *builder = Box::new(newbuilder);
+                                }
+                                Some(val) => {
+                                    /* Here, we need to modify the expression itself - because we need
+                                     * to add a let statement. It doesn't seem possible to just modify
+                                     * it directly, as we did with the builder, so we create and return
+                                     * a new expression -- which transform_up will replace expr with */
+                                    let orig_data = iters[0].data.clone();
+                                    iters[0].data = Box::new(val);
+                                    let mut new_loop = Expr::new_for(iters.clone(), newbuilder,
+                                    func.as_ref().clone()).unwrap();
+                                    new_loop = Expr::new_let(data_sym, *orig_data, new_loop).unwrap();
+                                    /* returning from the lambda function we passed to transform_up */
+                                    return Some(new_loop);
+                                }
                             }
                         }
                     }

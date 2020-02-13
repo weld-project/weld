@@ -213,8 +213,8 @@ fn inline_let_helper(expr: &mut Expr, usages: &mut FnvHashMap<Symbol, SymbolTrac
     }
 
     // Set the body to this expression.
-    if taken_body.is_some() {
-        mem::swap(expr, taken_body.unwrap().as_mut());
+    if let Some(mut val) = taken_body {
+        mem::swap(expr, val.as_mut());
         inline_let_helper(expr, usages);
     } else {
         for child in expr.children_mut() {

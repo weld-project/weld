@@ -110,18 +110,15 @@ pub fn unroll_static_loop(expr: &mut Expr) {
                 .collect();
 
             let vals = unroll_values(pat.merge_params, pat.merge_value, &idents, pat.loop_size);
-            if vals.is_err() {
-                trace!("Unroller error: {}", vals.unwrap_err().description());
+            if let Err(err) = vals {
+                trace!("Unroller error: {}", err.description());
                 return None;
             }
             let vals = vals.unwrap();
 
             let combined_expr = combine_unrolled_values(pat.builder_kind.clone(), vals);
-            if combined_expr.is_err() {
-                trace!(
-                    "Unroller error: {}",
-                    combined_expr.unwrap_err().description()
-                );
+            if let Err(err) = combined_expr {
+                trace!("Unroller error: {}", err.description());
                 return None;
             }
 

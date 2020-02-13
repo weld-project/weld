@@ -152,7 +152,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                         annotations: Annotations::new(),
                     };
                     let new_elem_expr = Expr {
-                        ty: func_elem_type.clone(),
+                        ty: func_elem_type,
                         kind: Ident(new_params[2].name.clone()),
                         annotations: Annotations::new(),
                     };
@@ -202,14 +202,14 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                         annotations: Annotations::new(),
                     };
                     let new_iter_expr = Expr {
-                        ty: Vector(Box::new(merge_type.clone())),
+                        ty: Vector(Box::new(merge_type)),
                         kind: Res {
                             builder: Box::new(Expr {
                                 ty: builder_type.clone(),
                                 kind: For {
                                     iters: common_data.unwrap(),
                                     builder: Box::new(Expr {
-                                        ty: builder_type.clone(),
+                                        ty: builder_type,
                                         kind: NewBuilder(None),
                                         annotations: Annotations::new(),
                                     }),
@@ -412,12 +412,12 @@ fn replace_builder(
 
             let new_params = vec![
                 Parameter {
-                    ty: new_bldr.ty.clone(),
-                    name: new_bldr_sym.clone(),
+                    ty: new_bldr.ty,
+                    name: new_bldr_sym,
                 },
                 Parameter {
                     ty: Scalar(ScalarKind::I64),
-                    name: new_index_sym.clone(),
+                    name: new_index_sym,
                 },
                 Parameter {
                     ty: old_arg.ty.clone(),

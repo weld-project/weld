@@ -250,7 +250,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
 
                 // Add a let statement in front of the body that builds up the argument struct.
                 let old_param_expr = if new_elem_exprs.len() > 1 {
-                    Expr::new_make_struct(new_elem_exprs.clone()).unwrap()
+                    Expr::new_make_struct(new_elem_exprs).unwrap()
                 } else {
                     new_elem_exprs[0].clone()
                 };
@@ -263,7 +263,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
 
                 // Add let statements in front of the body that set the new_elem_symbols to new_elem_exprs.
                 let new_param_ident =
-                    Expr::new_ident(new_param_name.clone(), new_param_type.clone()).unwrap();
+                    Expr::new_ident(new_param_name, new_param_type).unwrap();
                 if new_elem_types.len() > 1 {
                     for i in (0..new_elem_types.len()).rev() {
                         new_body = Expr::new_let(
@@ -276,7 +276,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                 } else {
                     new_body = Expr::new_let(
                         new_elem_symbols[0].clone(),
-                        new_param_ident.clone(),
+                        new_param_ident,
                         new_body,
                     )
                     .unwrap()
@@ -284,7 +284,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
 
                 let new_func = Expr::new_lambda(new_params, new_body).unwrap();
                 let mut result =
-                    Expr::new_for(new_iters.clone(), builder.as_ref().clone(), new_func).unwrap();
+                    Expr::new_for(new_iters, builder.as_ref().clone(), new_func).unwrap();
                 result.annotations = expr.annotations.clone();
                 return Some(result);
             }

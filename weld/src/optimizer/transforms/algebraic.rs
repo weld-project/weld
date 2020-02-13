@@ -1,3 +1,5 @@
+#![allow(clippy::comparison_chain)]
+
 use num_integer;
 
 use crate::ast::ExprKind::*;

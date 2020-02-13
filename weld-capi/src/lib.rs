@@ -4,6 +4,7 @@
 //! library and a static library.
 //!
 //! See the docs for the main Weld crate for more details on these functions.
+#![allow(clippy::missing_safety_doc)]
 
 use weld;
 
