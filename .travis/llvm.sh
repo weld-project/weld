@@ -18,13 +18,7 @@ echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $DIST main"\
 sudo -E apt-get -qy --allow-unauthenticated install\
   gcc make llvm-$LLVM_VERSION llvm-$LLVM_VERSION-dev clang-$LLVM_VERSION lib32z1-dev
 
-which llvm-config
-llvm-config --libdir
-which llvm-config-6.0
-llvm-config-6.0 --libdir
-
 # Remove the old `llvm-config`
 sudo rm -f `which llvm-config`
 sudo rm -f /usr/bin/llvm-config
-# create new llvm-config symlink
 sudo ln -s /usr/bin/llvm-config-$LLVM_VERSION /usr/bin/llvm-config

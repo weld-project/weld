@@ -10,6 +10,14 @@ export LLVM_SYS_60_PREFIX=$(llvm-config-$LLVM_VERSION --libdir)
 # Weld Core Tests
 # ----------------------------------------------------------
 
+# build and test
+cargo clippy
+cargo fmt -- --check
+# Make sure the release build works.
+cargo build --release
+# Test uses the debug build.
+cargo test
+
 # Python Tests
 # ----------------------------------------------------------
 
