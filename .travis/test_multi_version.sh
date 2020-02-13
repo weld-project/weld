@@ -1,8 +1,13 @@
 #!/bin/bash
+#
+# A script to test Weld on various versions of Python and LLVM.
 
 LLVM_VERSION=$1
 LLVM_SYS_VERSION=$2
 PYTHON_VERSION=$3
+
+# Weld Core Tests
+# ----------------------------------------------------------
 
 # create llvm-config symlink
 sudo rm -f /usr/bin/llvm-config
@@ -15,14 +20,20 @@ sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 # build and test
 cargo clippy
 cargo fmt -- --check
-cargo build #--release
+# Make sure the release build works.
+cargo build --release
+# Test uses the debug build.
 cargo test
 
 # Python Tests
+# ----------------------------------------------------------
+
 cd $WELD_HOME
-virtualenv travis-test-env
+virtualenv travis-test-env --python="python$PYTHON_VERSION"
 source travis-test-env/bin/activate
 cd weld-python
+
+pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 
 # Install Rust Requirements
@@ -32,3 +43,6 @@ pip install -e .
 
 # Run the tests
 pytest
+
+deactivate
+cd $WELD_HOME
