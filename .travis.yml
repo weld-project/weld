@@ -1,19 +1,31 @@
-language: rust
-sudo: required
+language: python
+
 dist: trusty
+
+cache:
+  pip: true
+  cargo: true
+
+env:
+  global:
+    - RUST_BACKTRACE=1
+
+addons:
+  apt:
+    packages:
+      - lib32z1-dev
+      - gcc
+      - make
+
+python: "3.7"
+
 before_install:
-- sudo -E apt-add-repository -y "ppa:deadsnakes/ppa"
-- curl -sSL "https://apt.llvm.org/llvm-snapshot.gpg.key" | sudo -E apt-key add -
-- echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main" | sudo tee -a /etc/apt/sources.list >/dev/null
-- curl -sSL "https://build.travis-ci.org/files/gpg/travis-security.asc" | sudo -E apt-key add -
-- echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main" | sudo tee -a /etc/apt/sources.list >/dev/null
-install:
-- rustup component add rustfmt
-- rustup component add clippy
-- sudo rm -f `which llvm-config`
-- export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
-- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install libssl-dev gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python3.7 python3.7-venv
-- PATH=$PATH:/home/travis/.cargo/bin
+- source .travis/llvm.sh 6.0 trusty
+- source .travis/rust.sh
+
+install:
+  - pip install setuptools-rust numpy pandas pytest
+
 script:
 - bash -e -x .travis/test_multi_version.sh 6.0 60.0.3 3.7
