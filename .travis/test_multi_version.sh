@@ -3,14 +3,12 @@
 # A script to test Weld on various versions of Python and LLVM.
 
 LLVM_VERSION=$1
-LLVM_SYS_VERSION=$2
-PYTHON_VERSION=$3
+PYTHON_VERSION=$2
+
+export LLVM_SYS_60_PREFIX=$(llvm-config-$LLVM_VERISON --libdir)
 
 # Weld Core Tests
 # ----------------------------------------------------------
-
-# set llvm-sys crate version
-sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 
 # Python Tests
 # ----------------------------------------------------------

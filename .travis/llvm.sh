@@ -22,8 +22,11 @@ sudo -E apt-get\
   --allow-unauthenticated\ install\
   gcc make llvm-$LLVM_VERSION llvm-$LLVM_VERSION-dev clang-$LLVM_VERSION lib32z1-dev
 
+which llvm-config
+llvm-config --libdir
+echo $PATH
+
 # Remove the old `llvm-config`
 sudo rm -f `which llvm-config`
 # create new llvm-config symlink
-sudo rm -f /usr/bin/llvm-config
 sudo ln -s /usr/bin/llvm-config-$LLVM_VERSION /usr/bin/llvm-config
