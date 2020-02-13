@@ -25,7 +25,6 @@ virtualenv travis-test-env --python="python$PYTHON_VERSION"
 source travis-test-env/bin/activate
 cd weld-python
 
-pip install --upgrade pip setuptools wheel
 pip install numpy pandas pytest setuptools-rust
 
 # Install Rust Requirements
