@@ -505,7 +505,7 @@ impl StatementTracker {
         prog.add_local_named(sym_ty, &named_sym, func);
         prog.funcs[func].blocks[block]
             .add_statement(Statement::new(Some(named_sym.clone()), kind.clone()));
-        map.insert(kind, named_sym.clone());
+        map.insert(kind, named_sym);
     }
 }
 
@@ -1215,7 +1215,7 @@ fn gen_expr(
 
             let kind = Lookup {
                 child: data_sym,
-                index: index_sym.clone(),
+                index: index_sym,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1232,7 +1232,7 @@ fn gen_expr(
 
             let kind = OptLookup {
                 child: data_sym,
-                index: index_sym.clone(),
+                index: index_sym,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1244,7 +1244,7 @@ fn gen_expr(
             let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block, tracker)?;
             let kind = KeyExists {
                 child: data_sym,
-                key: key_sym.clone(),
+                key: key_sym,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1263,8 +1263,8 @@ fn gen_expr(
                 gen_expr(size, prog, cur_func, cur_block, tracker)?;
             let kind = Slice {
                 child: data_sym,
-                index: index_sym.clone(),
-                size: size_sym.clone(),
+                index: index_sym,
+                size: size_sym,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1290,7 +1290,7 @@ fn gen_expr(
                     .params
                     .insert(params[1].name.clone(), params[1].ty.clone());
                 prog.funcs[cmpfunc_id].blocks[cmpblock].terminator =
-                    Terminator::EndFunction(cmp_sym.clone());
+                    Terminator::EndFunction(cmp_sym);
 
                 let (cur_func, cur_block, data_sym) =
                     gen_expr(data, prog, cur_func, cur_block, tracker)?;
@@ -1322,8 +1322,8 @@ fn gen_expr(
                 gen_expr(on_false, prog, cur_func, cur_block, tracker)?;
             let kind = Select {
                 cond: cond_sym,
-                on_true: true_sym.clone(),
-                on_false: false_sym.clone(),
+                on_true: true_sym,
+                on_false: false_sym,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1432,7 +1432,7 @@ fn gen_expr(
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(Statement::new(
                 Some(continue_sym.clone()),
                 GetField {
-                    value: result_sym.clone(),
+                    value: result_sym,
                     index: 1,
                 },
             ));
@@ -1678,7 +1678,7 @@ fn gen_expr(
 
                 let kind = ParallelFor(ParallelForData {
                     data: pf_iters,
-                    builder: builder_sym.clone(),
+                    builder: builder_sym,
                     builder_arg: params[0].name.clone(),
                     idx_arg: params[1].name.clone(),
                     data_arg: params[2].name.clone(),

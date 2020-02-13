@@ -117,6 +117,7 @@
 #![cfg_attr(not(test), allow(dead_code))]
 #![allow(clippy::cognitive_complexity)]
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::missing_safety_doc)]
 
 #[macro_use]
 extern crate lazy_static;

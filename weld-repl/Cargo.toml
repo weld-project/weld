@@ -1,6 +1,6 @@
 [package]
 name = "repl"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 edition = "2018"
 

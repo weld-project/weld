@@ -107,7 +107,6 @@ impl<'a> MapIter<'a> {
 ///   - Like all Zip-based transforms, this function currently assumes that the output of each
 ///     expression in the Zip is the same length.
 pub fn fuse_loops_2(expr: &mut Expr) {
-    use crate::ast::constructors::*;
     if expr.uniquify().is_err() {
         return;
     }
@@ -157,7 +156,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                         // element values we pull from those iterators in the upper-level loop.
                         let mut value = map.merge_value.clone();
                         let index_ident =
-                            ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
+                            Expr::new_ident(params[1].name.clone(), params[1].ty.clone()).unwrap();
                         value.substitute(&map.merge_params[1].name, &index_ident);
 
                         // For each iterator in the original MapIter, figure out a local variable that will hold
@@ -185,7 +184,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                                 new_elem_symbols.push(new_elem_symbol);
                                 iter_num = new_iters.len() - 1;
                             }
-                            let elem_ident = ident_expr(
+                            let elem_ident = Expr::new_ident(
                                 new_elem_symbols[iter_num].clone(),
                                 new_elem_types[iter_num].clone(),
                             )
@@ -199,9 +198,10 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                         // that into our value expression; otherwise just substitute the single symbol we're using
                         if map_elem_exprs.len() > 1 {
                             let struct_symbol = gen.new_symbol("tmp");
-                            let make_struct = makestruct_expr(map_elem_exprs).unwrap();
+                            let make_struct = Expr::new_make_struct(map_elem_exprs).unwrap();
                             let struct_ident =
-                                ident_expr(struct_symbol.clone(), make_struct.ty.clone()).unwrap();
+                                Expr::new_ident(struct_symbol.clone(), make_struct.ty.clone())
+                                    .unwrap();
                             let_statements.push((struct_symbol, make_struct));
                             value.substitute(&map.merge_params[2].name, &struct_ident);
                         } else {
@@ -227,7 +227,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                             iter_num = new_iters.len() - 1;
                         }
                         // Push an expression for this element.
-                        let elem_ident = ident_expr(
+                        let elem_ident = Expr::new_ident(
                             new_elem_symbols[iter_num].clone(),
                             new_elem_types[iter_num].clone(),
                         )
@@ -251,41 +251,36 @@ pub fn fuse_loops_2(expr: &mut Expr) {
 
                 // Add a let statement in front of the body that builds up the argument struct.
                 let old_param_expr = if new_elem_exprs.len() > 1 {
-                    makestruct_expr(new_elem_exprs.clone()).unwrap()
+                    Expr::new_make_struct(new_elem_exprs).unwrap()
                 } else {
                     new_elem_exprs[0].clone()
                 };
-                new_body = let_expr(params[2].name.clone(), old_param_expr, new_body).unwrap();
+                new_body = Expr::new_let(params[2].name.clone(), old_param_expr, new_body).unwrap();
 
                 // Add any let statements we created for temporary structs.
                 for pair in let_statements.iter().rev() {
-                    new_body = let_expr(pair.0.clone(), pair.1.clone(), new_body).unwrap()
+                    new_body = Expr::new_let(pair.0.clone(), pair.1.clone(), new_body).unwrap()
                 }
 
                 // Add let statements in front of the body that set the new_elem_symbols to new_elem_exprs.
-                let new_param_ident =
-                    ident_expr(new_param_name.clone(), new_param_type.clone()).unwrap();
+                let new_param_ident = Expr::new_ident(new_param_name, new_param_type).unwrap();
                 if new_elem_types.len() > 1 {
                     for i in (0..new_elem_types.len()).rev() {
-                        new_body = let_expr(
+                        new_body = Expr::new_let(
                             new_elem_symbols[i].clone(),
-                            getfield_expr(new_param_ident.clone(), i as u32).unwrap(),
+                            Expr::new_get_field(new_param_ident.clone(), i as u32).unwrap(),
                             new_body,
                         )
                         .unwrap()
                     }
                 } else {
-                    new_body = let_expr(
-                        new_elem_symbols[0].clone(),
-                        new_param_ident.clone(),
-                        new_body,
-                    )
-                    .unwrap()
+                    new_body = Expr::new_let(new_elem_symbols[0].clone(), new_param_ident, new_body)
+                        .unwrap()
                 }
 
-                let new_func = lambda_expr(new_params, new_body).unwrap();
+                let new_func = Expr::new_lambda(new_params, new_body).unwrap();
                 let mut result =
-                    for_expr(new_iters.clone(), builder.as_ref().clone(), new_func, false).unwrap();
+                    Expr::new_for(new_iters, builder.as_ref().clone(), new_func).unwrap();
                 result.annotations = expr.annotations.clone();
                 return Some(result);
             }
@@ -299,7 +294,6 @@ pub fn fuse_loops_2(expr: &mut Expr) {
 /// enable further pattern matching on map functions downstream. This is only allowed when the let
 /// statement is not defining some symbol that's used in the builder expression, so we check for that.
 pub fn move_merge_before_let(expr: &mut Expr) {
-    use crate::ast::constructors::*;
     expr.transform_up(&mut |ref mut expr| {
         if let Let {
             ref name,
@@ -314,9 +308,9 @@ pub fn move_merge_before_let(expr: &mut Expr) {
             {
                 if !builder.contains_symbol(name) {
                     return Some(
-                        merge_expr(
+                        Expr::new_merge(
                             *builder.clone(),
-                            let_expr(name.clone(), *let_value.clone(), *merge_value.clone())
+                            Expr::new_let(name.clone(), *let_value.clone(), *merge_value.clone())
                                 .unwrap(),
                         )
                         .unwrap(),
@@ -411,7 +405,6 @@ pub fn aggressive_inline_let(expr: &mut Expr) {
 /// Caveats: This transformation will only fire if each vector in the iterator is bound to an
 /// identifier.
 pub fn merge_makestruct_loops(expr: &mut Expr) {
-    use crate::ast::constructors::*;
     expr.uniquify().unwrap();
     expr.transform(&mut |ref mut expr| {
         if let MakeStruct { ref elems } = expr.kind {
@@ -535,16 +528,18 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
                 // MergeSingle pattern, we shouldn't have any builders in here.
                 for (j, ref param) in ma.params.iter().enumerate() {
                     let replacement =
-                        &ident_expr(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
+                        &Expr::new_ident(first_ma.params[j].name.clone(), param.ty.clone())
+                            .unwrap();
                     new_body.substitute(&param.name, replacement);
                 }
                 // Add the new merge expression to the list of bodies.
-                let builder_expr = getfield_expr(
-                    ident_expr(first_ma.params[0].name.clone(), final_builder_ty.clone()).unwrap(),
+                let builder_expr = Expr::new_get_field(
+                    Expr::new_ident(first_ma.params[0].name.clone(), final_builder_ty.clone())
+                        .unwrap(),
                     i as u32,
                 )
                 .unwrap();
-                bodies.push(merge_expr(builder_expr, new_body).unwrap());
+                bodies.push(Expr::new_merge(builder_expr, new_body).unwrap());
             }
 
             let final_iters = rfas[0].iters.clone();
@@ -563,31 +558,31 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
             assert!(newbuilders.len() == elems.len());
 
             // Build the function and final body.
-            let final_body = makestruct_expr(bodies).unwrap();
+            let final_body = Expr::new_make_struct(bodies).unwrap();
             let mut final_params = first_ma.params.clone();
             final_params[0].ty = final_builder_ty.clone();
 
-            let final_func = lambda_expr(final_params, final_body).unwrap();
-            let final_loop = for_expr(
+            let final_func = Expr::new_lambda(final_params, final_body).unwrap();
+            let final_loop = Expr::new_for(
                 final_iters,
-                makestruct_expr(newbuilders).unwrap(),
+                Expr::new_make_struct(newbuilders).unwrap(),
                 final_func,
-                false,
             )
             .unwrap();
 
             let mut gen = SymbolGenerator::from_expression(expr);
             let struct_name = gen.new_symbol("tmp");
 
-            let builder_iden = ident_expr(struct_name.clone(), final_builder_ty).unwrap();
+            let builder_iden = Expr::new_ident(struct_name.clone(), final_builder_ty).unwrap();
 
             let results = (0..rfas.len())
                 .map(|i| {
-                    result_expr(getfield_expr(builder_iden.clone(), i as u32).unwrap()).unwrap()
+                    Expr::new_result(Expr::new_get_field(builder_iden.clone(), i as u32).unwrap())
+                        .unwrap()
                 })
                 .collect();
-            let results = makestruct_expr(results).unwrap();
-            let final_expr = let_expr(struct_name, final_loop, results).unwrap();
+            let results = Expr::new_make_struct(results).unwrap();
+            let final_expr = Expr::new_let(struct_name, final_loop, results).unwrap();
 
             return Some(final_expr);
         }

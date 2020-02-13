@@ -213,8 +213,8 @@ fn inline_let_helper(expr: &mut Expr, usages: &mut FnvHashMap<Symbol, SymbolTrac
     }
 
     // Set the body to this expression.
-    if taken_body.is_some() {
-        mem::swap(expr, taken_body.unwrap().as_mut());
+    if let Some(mut val) = taken_body {
+        mem::swap(expr, val.as_mut());
         inline_let_helper(expr, usages);
     } else {
         for child in expr.children_mut() {
@@ -225,21 +225,20 @@ fn inline_let_helper(expr: &mut Expr, usages: &mut FnvHashMap<Symbol, SymbolTrac
 
 /// Changes negations of literal values to be literal negated values.
 pub fn inline_negate(expr: &mut Expr) {
-    use crate::ast::constructors::literal_expr;
     use crate::ast::LiteralKind::*;
     expr.transform(&mut |ref mut expr| {
         if let Negate(ref child_expr) = expr.kind {
             if let Literal(ref literal_kind) = child_expr.kind {
                 let res = match *literal_kind {
-                    I8Literal(a) => Some(literal_expr(I8Literal(-a)).unwrap()),
-                    I16Literal(a) => Some(literal_expr(I16Literal(-a)).unwrap()),
-                    I32Literal(a) => Some(literal_expr(I32Literal(-a)).unwrap()),
-                    I64Literal(a) => Some(literal_expr(I64Literal(-a)).unwrap()),
+                    I8Literal(a) => Some(Expr::new_literal(I8Literal(-a)).unwrap()),
+                    I16Literal(a) => Some(Expr::new_literal(I16Literal(-a)).unwrap()),
+                    I32Literal(a) => Some(Expr::new_literal(I32Literal(-a)).unwrap()),
+                    I64Literal(a) => Some(Expr::new_literal(I64Literal(-a)).unwrap()),
                     F32Literal(a) => {
-                        Some(literal_expr(F32Literal((-f32::from_bits(a)).to_bits())).unwrap())
+                        Some(Expr::new_literal(F32Literal((-f32::from_bits(a)).to_bits())).unwrap())
                     }
                     F64Literal(a) => {
-                        Some(literal_expr(F64Literal((-f64::from_bits(a)).to_bits())).unwrap())
+                        Some(Expr::new_literal(F64Literal((-f64::from_bits(a)).to_bits())).unwrap())
                     }
                     _ => None,
                 };
@@ -255,7 +254,6 @@ pub fn inline_negate(expr: &mut Expr) {
 /// This changes casts of literal values to be literal values of the casted type. It additionally
 /// removes "self casts" (e.g., `i64(x: i64)` becomes `x`).
 pub fn inline_cast(expr: &mut Expr) {
-    use crate::ast::constructors::literal_expr;
     use crate::ast::LiteralKind::*;
     use crate::ast::ScalarKind::*;
     use crate::ast::Type::Scalar;
@@ -268,11 +266,13 @@ pub fn inline_cast(expr: &mut Expr) {
             if let Literal(ref literal_kind) = child_expr.kind {
                 return match (scalar_kind, literal_kind) {
                     (&F64, &I32Literal(a)) => {
-                        Some(literal_expr(F64Literal((f64::from(a)).to_bits())).unwrap())
+                        Some(Expr::new_literal(F64Literal((f64::from(a)).to_bits())).unwrap())
                     }
-                    (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(i64::from(a))).unwrap()),
+                    (&I64, &I32Literal(a)) => {
+                        Some(Expr::new_literal(I64Literal(i64::from(a))).unwrap())
+                    }
                     (&F64, &I64Literal(a)) => {
-                        Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
+                        Some(Expr::new_literal(F64Literal((a as f64).to_bits())).unwrap())
                     }
                     _ => None,
                 };
@@ -364,7 +364,6 @@ pub fn simplify_branch_conditions(expr: &mut Expr) {
 /// us + us#1 + us#2
 ///
 pub fn unroll_structs(expr: &mut Expr) {
-    use crate::ast::constructors::*;
     use crate::util::SymbolGenerator;
 
     expr.uniquify().unwrap();
@@ -402,7 +401,7 @@ pub fn unroll_structs(expr: &mut Expr) {
                 new_body.transform(&mut |ref mut expr2| {
                     if let Some(index) = getfield_on_symbol(expr2, name) {
                         let sym = symbols[index as usize].clone();
-                        return Some(ident_expr(sym, expr2.ty.clone()).unwrap());
+                        return Some(Expr::new_ident(sym, expr2.ty.clone()).unwrap());
                     }
                     None
                 });
@@ -410,7 +409,7 @@ pub fn unroll_structs(expr: &mut Expr) {
                 // Unroll the struct elements by assigning each one to a name.
                 let mut prev = new_body;
                 for (i, sym) in symbols.into_iter().enumerate().rev() {
-                    prev = let_expr(sym, elems[i].clone(), prev).unwrap();
+                    prev = Expr::new_let(sym, elems[i].clone(), prev).unwrap();
                 }
                 return Some(prev);
             }

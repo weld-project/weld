@@ -1,6 +1,7 @@
+#![allow(clippy::comparison_chain)]
+
 use num_integer;
 
-use crate::ast::constructors::*;
 use crate::ast::ExprKind::*;
 use crate::ast::LiteralKind::*;
 use crate::ast::Type::*;
@@ -182,8 +183,10 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     let kind = flip_logical(*binop_kind);
                                     Some(BinOp {
                                         kind,
-                                        left: Box::new(not_expr(lhs.as_mut().take()).unwrap()),
-                                        right: Box::new(not_expr(rhs.as_mut().take()).unwrap()),
+                                        left: Box::new(Expr::new_not(lhs.as_mut().take()).unwrap()),
+                                        right: Box::new(
+                                            Expr::new_not(rhs.as_mut().take()).unwrap(),
+                                        ),
                                     })
                                 }
                             }
@@ -539,7 +542,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 // x > -y = -x < y and x < -y = -x > y equivalent for >= and <=
                                 Some(BinOp {
                                     kind: flip_comp(*binop_kind),
-                                    left: Box::new(negate_expr(lhs.as_mut().take()).unwrap()),
+                                    left: Box::new(Expr::new_negate(lhs.as_mut().take()).unwrap()),
                                     right: inner_expr.take(),
                                 })
                             } else {
@@ -566,7 +569,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         Some(BinOp {
                                             kind: *binop_kind,
                                             left: Box::new(
-                                                negate_expr(lhs.as_mut().take()).unwrap(),
+                                                Expr::new_negate(lhs.as_mut().take()).unwrap(),
                                             ),
                                             right: inner_expr.take(),
                                         })
@@ -880,7 +883,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 let new = BinOp {
                                     kind: flip_comp(*binop_kind),
                                     left: inner_expr.take(),
-                                    right: Box::new(negate_expr(rhs.as_mut().take()).unwrap()),
+                                    right: Box::new(Expr::new_negate(rhs.as_mut().take()).unwrap()),
                                 };
                                 Some(new)
                             } else {
@@ -900,7 +903,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         let new = BinOp {
                                             kind: Subtract,
                                             left: Box::new(
-                                                negate_expr(rhs.as_mut().take()).unwrap(),
+                                                Expr::new_negate(rhs.as_mut().take()).unwrap(),
                                             ),
                                             right: inner_expr.take(),
                                         };
@@ -912,7 +915,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                             kind: *binop_kind,
                                             left: inner_expr.take(),
                                             right: Box::new(
-                                                negate_expr(rhs.as_mut().take()).unwrap(),
+                                                Expr::new_negate(rhs.as_mut().take()).unwrap(),
                                             ),
                                         };
                                         Some(new)
@@ -1047,19 +1050,15 @@ fn flip_logical(k: BinOpKind) -> BinOpKind {
 }
 
 fn right_associate(op: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -> ExprKind {
-    let ty = e1.ty.clone();
     BinOp {
         kind: op,
         left: e1,
         right: Box::new(
-            new_expr(
-                BinOp {
-                    kind: op,
-                    left: e2,
-                    right: e3,
-                },
-                ty,
-            )
+            Expr::new(BinOp {
+                kind: op,
+                left: e2,
+                right: e3,
+            })
             .unwrap(),
         ),
     }
@@ -1072,37 +1071,29 @@ fn right_associate2(
     e2: Box<Expr>,
     e3: Box<Expr>,
 ) -> ExprKind {
-    let ty = e1.ty.clone();
     BinOp {
         kind: op1,
         left: e1,
         right: Box::new(
-            new_expr(
-                BinOp {
-                    kind: op2,
-                    left: e2,
-                    right: e3,
-                },
-                ty,
-            )
+            Expr::new(BinOp {
+                kind: op2,
+                left: e2,
+                right: e3,
+            })
             .unwrap(),
         ),
     }
 }
 
 fn left_associate(op: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -> ExprKind {
-    let ty = e1.ty.clone();
     BinOp {
         kind: op,
         left: Box::new(
-            new_expr(
-                BinOp {
-                    kind: op,
-                    left: e1,
-                    right: e2,
-                },
-                ty,
-            )
+            Expr::new(BinOp {
+                kind: op,
+                left: e1,
+                right: e2,
+            })
             .unwrap(),
         ),
         right: e3,
@@ -1116,18 +1107,14 @@ fn left_associate2(
     e2: Box<Expr>,
     e3: Box<Expr>,
 ) -> ExprKind {
-    let ty = e1.ty.clone();
     BinOp {
         kind: op2,
         left: Box::new(
-            new_expr(
-                BinOp {
-                    kind: op1,
-                    left: e1,
-                    right: e2,
-                },
-                ty,
-            )
+            Expr::new(BinOp {
+                kind: op1,
+                left: e1,
+                right: e2,
+            })
             .unwrap(),
         ),
         right: e3,

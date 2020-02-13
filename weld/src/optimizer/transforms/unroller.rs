@@ -6,7 +6,6 @@ use std::error::Error;
 
 use crate::ast::*;
 
-use crate::ast::constructors::*;
 use crate::ast::BuilderKind::*;
 use crate::ast::ExprKind::*;
 use crate::ast::Type::*;
@@ -107,22 +106,19 @@ pub fn unroll_static_loop(expr: &mut Expr) {
             let idents: Vec<_> = symbols
                 .iter()
                 .zip(pat.iters.iter())
-                .map(|ref t| ident_expr(t.0.clone(), t.1.data.ty.clone()).unwrap())
+                .map(|ref t| Expr::new_ident(t.0.clone(), t.1.data.ty.clone()).unwrap())
                 .collect();
 
             let vals = unroll_values(pat.merge_params, pat.merge_value, &idents, pat.loop_size);
-            if vals.is_err() {
-                trace!("Unroller error: {}", vals.unwrap_err().description());
+            if let Err(err) = vals {
+                trace!("Unroller error: {}", err.description());
                 return None;
             }
             let vals = vals.unwrap();
 
             let combined_expr = combine_unrolled_values(pat.builder_kind.clone(), vals);
-            if combined_expr.is_err() {
-                trace!(
-                    "Unroller error: {}",
-                    combined_expr.unwrap_err().description()
-                );
+            if let Err(err) = combined_expr {
+                trace!("Unroller error: {}", err.description());
                 return None;
             }
 
@@ -131,7 +127,7 @@ pub fn unroll_static_loop(expr: &mut Expr) {
             for (ref sym, ref iter) in symbols.into_iter().rev().zip(pat.iters.iter().rev()) {
                 // Construct this explicitly instead of using the `expr` based constructor
                 // to allow a move of the boxed value, avoiding a copy.
-                prev = let_expr(sym.clone(), iter.data.as_ref().clone(), prev).unwrap();
+                prev = Expr::new_let(sym.clone(), iter.data.as_ref().clone(), prev).unwrap();
             }
             Some(prev)
         } else {
@@ -163,7 +159,7 @@ fn unroll_values(
 
     let index_symbol = &parameters[1].name;
     let elem_symbol = &parameters[2].name;
-    let elem_ident = &ident_expr(elem_symbol.clone(), parameters[2].ty.clone())?;
+    let elem_ident = &Expr::new_ident(elem_symbol.clone(), parameters[2].ty.clone())?;
 
     let mut expressions = vec![];
     for i in 0..loopsize {
@@ -172,15 +168,15 @@ fn unroll_values(
             match e.kind {
                 Ident(ref name) if name == index_symbol => {
                     // Index identifiers can be handled by just substituting a static index.
-                    Some(literal_expr(LiteralKind::I64Literal(i as i64)).unwrap())
+                    Some(Expr::new_literal(LiteralKind::I64Literal(i as i64)).unwrap())
                 }
                 Ident(ref name) if name == elem_symbol && vectors.len() == 1 => {
                     // There is a single iterator, which means the type of the element is the type
                     // of the iterator's data. Replace it with a lookup into the vector.
                     Some(
-                        lookup_expr(
+                        Expr::new_lookup(
                             vectors[0].clone(),
-                            literal_expr(LiteralKind::I64Literal(i as i64)).unwrap(),
+                            Expr::new_literal(LiteralKind::I64Literal(i as i64)).unwrap(),
                         )
                         .unwrap(),
                     )
@@ -193,9 +189,9 @@ fn unroll_values(
                     // pulling one of the elements out of that struct. Replace it with a lookup into the vector.
                     let data_expr = vectors[*index as usize].clone();
                     Some(
-                        lookup_expr(
+                        Expr::new_lookup(
                             data_expr,
-                            literal_expr(LiteralKind::I64Literal(i as i64)).unwrap(),
+                            Expr::new_literal(LiteralKind::I64Literal(i as i64)).unwrap(),
                         )
                         .unwrap(),
                     )
@@ -228,7 +224,7 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
                 if prev.is_none() {
                     prev = Some(value);
                 } else {
-                    prev = Some(binop_expr(*binop, prev.unwrap(), value)?);
+                    prev = Some(Expr::new_bin_op(*binop, prev.unwrap(), value)?);
                 }
             }
             Ok(prev.unwrap())
@@ -237,7 +233,7 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
             if values.iter().any(|ref expr| expr.ty != *ty.as_ref()) {
                 return compile_err!("Mismatched types in Appender and unrolled values.");
             }
-            makevector_expr(values)
+            Expr::new_make_vector(values)
         }
         ref bk => compile_err!(
             "Unroller transform does not support loops with builder of kind {:?}",

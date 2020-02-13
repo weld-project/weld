@@ -1,6 +1,6 @@
 [package]
 name = "weld-python"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Shoumik Palkar <shoumik@cs.stanford.edu>"]
 edition = "2018"
 
