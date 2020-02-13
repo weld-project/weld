@@ -21,7 +21,7 @@ sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 # ----------------------------------------------------------
 
 cd $WELD_HOME
-virtualenv travis-test-env --python="python$PYTHON_VERSION"
+python$PYTHON_VERSION -m venv travis-test-env --python="python$PYTHON_VERSION"
 source travis-test-env/bin/activate
 cd weld-python
 
