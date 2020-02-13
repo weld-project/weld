@@ -268,7 +268,9 @@ pub fn inline_cast(expr: &mut Expr) {
                     (&F64, &I32Literal(a)) => {
                         Some(Expr::new_literal(F64Literal((f64::from(a)).to_bits())).unwrap())
                     }
-                    (&I64, &I32Literal(a)) => Some(Expr::new_literal(I64Literal(i64::from(a))).unwrap()),
+                    (&I64, &I32Literal(a)) => {
+                        Some(Expr::new_literal(I64Literal(i64::from(a))).unwrap())
+                    }
                     (&F64, &I64Literal(a)) => {
                         Some(Expr::new_literal(F64Literal((a as f64).to_bits())).unwrap())
                     }

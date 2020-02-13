@@ -97,12 +97,10 @@ pub fn vectorize(expr: &mut Expr) {
 
                     let vectorized_loop =
                         Expr::new_for(vec_iters, *init_builder.clone(), vec_func)?;
-                    let scalar_loop = Expr::new_for(fringe_iters, vectorized_loop,
-                        *func.clone())?;
+                    let scalar_loop = Expr::new_for(fringe_iters, vectorized_loop, *func.clone())?;
                     let mut prev_expr = scalar_loop;
                     for (iter, name) in iters.iter().zip(data_names).rev() {
-                        prev_expr =
-                            Expr::new_let(name.clone(), *iter.data.clone(), prev_expr)?;
+                        prev_expr = Expr::new_let(name.clone(), *iter.data.clone(), prev_expr)?;
                     }
 
                     vectorized = true;
@@ -240,11 +238,8 @@ pub fn predicate_simple_expr(e: &mut Expr) {
 
             if let Scalar(_) = on_true.ty {
                 if let Scalar(_) = on_false.ty {
-                    let expr = Expr::new_select(
-                        *cond.clone(),
-                        *on_true.clone(),
-                        *on_false.clone(),
-                    )?;
+                    let expr =
+                        Expr::new_select(*cond.clone(), *on_true.clone(), *on_false.clone())?;
                     return Ok((Some(expr), true));
                 }
             }
@@ -505,10 +500,7 @@ fn make_select_for_kv(cond: Expr, kv: Expr, ident: Expr) -> WeldResult<Option<Ex
     let name = sym_gen.new_symbol("k");
 
     let kv_struct = Expr::new_ident(name.clone(), kv.ty.clone())?;
-    let kv_ident = Expr::new_make_struct(vec![
-        Expr::new_get_field(kv_struct.clone(), 0)?,
-        ident,
-    ])?; // use the original key and the identity as the value
+    let kv_ident = Expr::new_make_struct(vec![Expr::new_get_field(kv_struct.clone(), 0)?, ident])?; // use the original key and the identity as the value
 
     let sel = Expr::new_select(cond, kv_struct, kv_ident)?;
     let le = Expr::new_let(name, kv, sel)?; /* avoid copying key */

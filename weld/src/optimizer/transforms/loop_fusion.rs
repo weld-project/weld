@@ -369,10 +369,8 @@ fn replace_builder(
             let old_arg = &args[2];
             let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name());
             let new_index_sym = sym_gen.new_symbol(&old_index.name.name());
-            let new_bldr =
-                Expr::new_ident(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
-            let new_index =
-                Expr::new_ident(new_index_sym.clone(), nested_args[1].ty.clone())?;
+            let new_bldr = Expr::new_ident(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
+            let new_index = Expr::new_ident(new_index_sym.clone(), nested_args[1].ty.clone())?;
 
             // Fix expressions to use the new builder.
             new_body.transform_and_continue_res(&mut |ref mut e| match e.kind {

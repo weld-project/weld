@@ -1116,11 +1116,7 @@ impl<'t> Parser<'t> {
 
                 let mut expr = expr_box(NewBuilder(arg), Annotations::new());
                 expr.ty = Builder(
-                    DictMerger(
-                        Box::new(key_type),
-                        Box::new(value_type),
-                        bin_op,
-                    ),
+                    DictMerger(Box::new(key_type), Box::new(value_type), bin_op),
                     annotations,
                 );
                 Ok(expr)
@@ -1354,11 +1350,7 @@ impl<'t> Parser<'t> {
                 let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
                 Ok(Builder(
-                    DictMerger(
-                        Box::new(key_type),
-                        Box::new(value_type),
-                        binop,
-                    ),
+                    DictMerger(Box::new(key_type), Box::new(value_type), binop),
                     annotations,
                 ))
             }
@@ -1381,10 +1373,7 @@ impl<'t> Parser<'t> {
                 let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
 
-                Ok(Builder(
-                    VecMerger(Box::new(elem_type), binop),
-                    annotations,
-                ))
+                Ok(Builder(VecMerger(Box::new(elem_type), binop), annotations))
             }
 
             TOpenBrace => {

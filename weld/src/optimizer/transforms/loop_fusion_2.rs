@@ -200,7 +200,8 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                             let struct_symbol = gen.new_symbol("tmp");
                             let make_struct = Expr::new_make_struct(map_elem_exprs).unwrap();
                             let struct_ident =
-                                Expr::new_ident(struct_symbol.clone(), make_struct.ty.clone()).unwrap();
+                                Expr::new_ident(struct_symbol.clone(), make_struct.ty.clone())
+                                    .unwrap();
                             let_statements.push((struct_symbol, make_struct));
                             value.substitute(&map.merge_params[2].name, &struct_ident);
                         } else {
@@ -262,8 +263,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                 }
 
                 // Add let statements in front of the body that set the new_elem_symbols to new_elem_exprs.
-                let new_param_ident =
-                    Expr::new_ident(new_param_name, new_param_type).unwrap();
+                let new_param_ident = Expr::new_ident(new_param_name, new_param_type).unwrap();
                 if new_elem_types.len() > 1 {
                     for i in (0..new_elem_types.len()).rev() {
                         new_body = Expr::new_let(
@@ -274,12 +274,8 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                         .unwrap()
                     }
                 } else {
-                    new_body = Expr::new_let(
-                        new_elem_symbols[0].clone(),
-                        new_param_ident,
-                        new_body,
-                    )
-                    .unwrap()
+                    new_body = Expr::new_let(new_elem_symbols[0].clone(), new_param_ident, new_body)
+                        .unwrap()
                 }
 
                 let new_func = Expr::new_lambda(new_params, new_body).unwrap();
@@ -532,12 +528,14 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
                 // MergeSingle pattern, we shouldn't have any builders in here.
                 for (j, ref param) in ma.params.iter().enumerate() {
                     let replacement =
-                        &Expr::new_ident(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
+                        &Expr::new_ident(first_ma.params[j].name.clone(), param.ty.clone())
+                            .unwrap();
                     new_body.substitute(&param.name, replacement);
                 }
                 // Add the new merge expression to the list of bodies.
                 let builder_expr = Expr::new_get_field(
-                    Expr::new_ident(first_ma.params[0].name.clone(), final_builder_ty.clone()).unwrap(),
+                    Expr::new_ident(first_ma.params[0].name.clone(), final_builder_ty.clone())
+                        .unwrap(),
                     i as u32,
                 )
                 .unwrap();
@@ -568,7 +566,7 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
             let final_loop = Expr::new_for(
                 final_iters,
                 Expr::new_make_struct(newbuilders).unwrap(),
-                final_func
+                final_func,
             )
             .unwrap();
 
@@ -579,7 +577,8 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
 
             let results = (0..rfas.len())
                 .map(|i| {
-                    Expr::new_result(Expr::new_get_field(builder_iden.clone(), i as u32).unwrap()).unwrap()
+                    Expr::new_result(Expr::new_get_field(builder_iden.clone(), i as u32).unwrap())
+                        .unwrap()
                 })
                 .collect();
             let results = Expr::new_make_struct(results).unwrap();

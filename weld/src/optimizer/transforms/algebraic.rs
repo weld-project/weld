@@ -184,7 +184,9 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     Some(BinOp {
                                         kind,
                                         left: Box::new(Expr::new_not(lhs.as_mut().take()).unwrap()),
-                                        right: Box::new(Expr::new_not(rhs.as_mut().take()).unwrap()),
+                                        right: Box::new(
+                                            Expr::new_not(rhs.as_mut().take()).unwrap(),
+                                        ),
                                     })
                                 }
                             }
@@ -1051,13 +1053,14 @@ fn right_associate(op: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -
     BinOp {
         kind: op,
         left: e1,
-        right: Box::new(Expr::new(
-            BinOp {
+        right: Box::new(
+            Expr::new(BinOp {
                 kind: op,
                 left: e2,
                 right: e3,
-            }
-        ).unwrap()),
+            })
+            .unwrap(),
+        ),
     }
 }
 
@@ -1071,16 +1074,28 @@ fn right_associate2(
     BinOp {
         kind: op1,
         left: e1,
-        right: Box::new(Expr::new(
-                BinOp {
-                    kind: op2, left: e2, right: e3}).unwrap()),
+        right: Box::new(
+            Expr::new(BinOp {
+                kind: op2,
+                left: e2,
+                right: e3,
+            })
+            .unwrap(),
+        ),
     }
 }
 
 fn left_associate(op: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -> ExprKind {
     BinOp {
         kind: op,
-        left: Box::new(Expr::new(BinOp { kind: op, left: e1, right: e2}).unwrap()),
+        left: Box::new(
+            Expr::new(BinOp {
+                kind: op,
+                left: e1,
+                right: e2,
+            })
+            .unwrap(),
+        ),
         right: e3,
     }
 }
@@ -1094,7 +1109,14 @@ fn left_associate2(
 ) -> ExprKind {
     BinOp {
         kind: op2,
-        left: Box::new(Expr::new(BinOp{ kind: op1, left: e1, right: e2}).unwrap()),
+        left: Box::new(
+            Expr::new(BinOp {
+                kind: op1,
+                left: e1,
+                right: e2,
+            })
+            .unwrap(),
+        ),
         right: e3,
     }
 }
