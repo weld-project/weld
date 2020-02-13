@@ -24,9 +24,11 @@ sudo -E apt-get\
 
 which llvm-config
 llvm-config --libdir
-echo $PATH
+which llvm-config-6.0
+llvm-config-6.0 --libdir
 
 # Remove the old `llvm-config`
 sudo rm -f `which llvm-config`
+sudo rm -f /usr/bin/llvm-config
 # create new llvm-config symlink
 sudo ln -s /usr/bin/llvm-config-$LLVM_VERSION /usr/bin/llvm-config
