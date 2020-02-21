@@ -14,6 +14,7 @@ from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.types import *
 
 from .ops import *
+from .error import *
 
 def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
     """
@@ -46,7 +47,7 @@ class GrizzlySeries(pd.Series):
 
     Examples
     --------
-    >>> x = GrizzlySeries([1,2,3]) 
+    >>> x = GrizzlySeries([1,2,3])
     >>> x
     0    1
     1    2
@@ -190,7 +191,7 @@ class GrizzlySeries(pd.Series):
         """
         Internal initialization. Tests below are for internal visibility only.
 
-        >>> x = GrizzlySeries([1,2,3]) 
+        >>> x = GrizzlySeries([1,2,3])
         >>> x
         0    1
         1    2
@@ -225,7 +226,7 @@ class GrizzlySeries(pd.Series):
             # First, convert the input into a Series backed by an ndarray.
             s = pd.Series(data, dtype=dtype, index=index, **kwargs)
             data = s.values
-        
+
         # Try to create a Weld type for the input.
         weld_type = GrizzlySeries._supports_grizzly(data)
         if weld_type is not None:
@@ -239,23 +240,66 @@ class GrizzlySeries(pd.Series):
         return s if s is not None else pd.Series(data, dtype=dtype, index=index, **kwargs)
 
     # ---------------------- Operators ------------------------------
-    #
-    # TODO(shoumik): this can probably be refactored a bit, so common arguments
-    # added to each of these functions will propagate automatically, etc.
-    def _arithmetic_binop_impl(self, other, op, truediv=False):
+
+    @classmethod
+    def _scalar_ty(cls, value, cast_ty):
+        """
+        Returns the scalar type of a scalar value. If the value is not a scalar,
+        returns None. For primitive 'int' values, returns 'cast_ty'.
+
+        This returns 'None' if the value type is not supported.
+
+        Parameters
+        ----------
+        value : any
+            value whose dtype to obtain.
+
+        Returns
+        -------
+        np.dtype
+
+        """
+        if hasattr(value, 'dtype') and hasattr(value, 'shape') and value.shape == ():
+            return wenp.dtype_to_weld_type(value.dtype)
+        if isinstance(value, int):
+            return cast_ty
+        if isinstance(value, float):
+            return F64()
+        if isinstance(value, bool):
+            return Bool()
+
+    def _arithmetic_binop_impl(self, other, op, truediv=False, dtype=None):
         """
         Performs the operation on two `Series` elementwise.
         """
         left_ty = self.output_type.elem_type
-        right_ty = other.output_type.elem_type
-        output_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+        scalar_ty = GrizzlySeries._scalar_ty(other, left_ty)
+        if scalar_ty is not None:
+            # Inline scalars directly instead of adding them
+            # as dependencies.
+            right_ty = scalar_ty
+            rightval = str(other)
+            print(rightval)
+            dependencies = [self.weld_value_]
+        else:
+            # Value is not a scalar -- for now, we require collection types to be
+            # GrizzlySeries.
+            if not isinstance(other, GrizzlySeries):
+                raise GrizzlyError("RHS of binary operator must be a GrizzlySeries")
+            right_ty = other.output_type.elem_type
+            rightval = str(other.weld_value_.id)
+            dependencies = [self.weld_value_, other.weld_value_]
+
+        cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+        output_type = cast_type if dtype is None else dtype
         code = binary_map(op,
                 left_type=str(left_ty),
                 right_type=str(right_ty),
                 leftval=str(self.weld_value_.id),
-                rightval=str(other.weld_value_.id),
-                cast_type=output_type)
-        lazy = WeldLazy(code, [self.weld_value_, other.weld_value_],
+                rightval=rightval,
+                scalararg=scalar_ty is not None,
+                cast_type=cast_type)
+        lazy = WeldLazy(code, dependencies,
                 WeldVec(output_type), GrizzlySeries._decoder)
         return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(output_type))
 
@@ -263,18 +307,7 @@ class GrizzlySeries(pd.Series):
         """
         Performs the comparison operation on two `Series` elementwise.
         """
-        left_ty = self.output_type.elem_type
-        right_ty = other.output_type.elem_type
-        cast_type = wenp.binop_output_type(left_ty, right_ty)
-        code = binary_map(op,
-                left_type=str(left_ty),
-                right_type=str(right_ty),
-                leftval=str(self.weld_value_.id),
-                rightval=str(other.weld_value_.id),
-                cast_type=cast_type)
-        lazy = WeldLazy(code, [self.weld_value_, other.weld_value_],
-                WeldVec(Bool()), GrizzlySeries._decoder)
-        return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(Bool()))
+        return self._arithmetic_binop_impl(other, op, dtype=Bool())
 
     def add(self, other):
         return self._arithmetic_binop_impl(other, '+')
@@ -398,7 +431,7 @@ class GrizzlySeries(pd.Series):
 
     @classmethod
     def _add_forwarding_methods(cls):
-        methods = dir(cls) 
+        methods = dir(cls)
         for meth in methods:
             if meth.startswith("_"):
                 # We only want to do this for API methods.
