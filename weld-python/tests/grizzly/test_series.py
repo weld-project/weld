@@ -5,6 +5,7 @@ Test basic Series functionality.
 
 import numpy as np
 import pandas as pd
+import pytest
 import weld.grizzly.series as gr
 
 types_ = ['int8', 'uint8', 'int16', 'uint16', 'int32',\
@@ -114,3 +115,24 @@ def test_basic_fallback():
         # Falls back to Pandas, since we don't support indices.
         assert isinstance(res, pd.Series)
     _compare_vs_pandas(eval_expression)
+
+def test_scalar():
+    types = ['int8', 'uint8', 'int16', 'uint16', 'int32',\
+            'uint32', 'int64', 'uint64', 'float32', 'float64']
+    for left in types:
+        for right in types:
+            a = gr.GrizzlySeries([1, 2, 3], dtype=left)
+            b = 123
+            result = (a + b).to_pandas()
+
+            a = pd.Series([1, 2, 3], dtype=left)
+            expect = a + b
+            assert result.equals(expect), "{}, {} (op={})".format(left, right, "scalar")
+
+def test_unsupported_binop_error():
+    # Test unsupported
+    from weld.grizzly.error import GrizzlyError
+    with pytest.raises(GrizzlyError):
+        a = gr.GrizzlySeries([1,2,3])
+        b = pd.Series([1,2,3])
+        a.add(b)

@@ -21,7 +21,7 @@ class Op(ABC):
 
 
 class UnaryOp(Op):
-    
+
     __slots__ = ['name', 'special', 'weld_name']
 
     def __init__(self, name, special=None, weld_name=None):
@@ -32,7 +32,7 @@ class UnaryOp(Op):
         self.weld_name = weld_name
 
 class BinaryOp(Op):
-    
+
     __slots__ = ['name', "infix", 'special', 'weld_name']
 
     def __init__(self, name, infix, special=None, weld_name=None):
@@ -75,7 +75,7 @@ class CompareOp(BinaryOp):
 
 class OpRegistry(object):
     """
-    A singleton for holding the supported operations. 
+    A singleton for holding the supported operations.
 
     Examples
     --------
@@ -158,7 +158,7 @@ def binary_apply(op, leftval, rightval, cast_type, infix=True):
         return "{op}({cast_type}({leftval}), {cast_type}({rightval}))".format(
                 op=op, leftval=leftval, rightval=rightval, cast_type=cast_type)
 
-def binary_map(op, left_type, right_type, leftval, rightval, cast_type, infix=True):
+def binary_map(op, left_type, right_type, leftval, rightval, cast_type, infix=True, scalararg=False):
     """
     Constructs a Weld string to apply a binary function to two vectors
     'leftval' and 'rightval' elementwise. Each element in the loop is cast to
@@ -170,8 +170,16 @@ def binary_map(op, left_type, right_type, leftval, rightval, cast_type, infix=Tr
     'map(zip(l, r), |e: {i32,i32}| (i32(e.$0) + i32(e.$1)))'
     >>> binary_map("max", "i32", "i16", "l", "r", 'i64', infix=False)
     'map(zip(l, r), |e: {i32,i16}| max(i64(e.$0), i64(e.$1)))'
+    >>> binary_map("+", "i32", "i16", "l", "1L", 'i64', scalararg=True)
+    'map(l, |e: i32| (i64(e) + i64(1L)))'
     """
-    return "map(zip({leftval}, {rightval}), |e: {{{left_type},{right_type}}}| {binary_apply})".format(
-             leftval=leftval, rightval=rightval,
-             left_type=left_type, right_type=right_type,
-             binary_apply=binary_apply(op, "e.$0", "e.$1", cast_type, infix=infix))
+    if scalararg:
+        return "map({leftval}, |e: {left_type}| {binary_apply})".format(
+                 leftval=leftval,
+                 left_type=left_type, right_type=right_type,
+                 binary_apply=binary_apply(op, "e", rightval, cast_type, infix=infix))
+    else:
+        return "map(zip({leftval}, {rightval}), |e: {{{left_type},{right_type}}}| {binary_apply})".format(
+                 leftval=leftval, rightval=rightval,
+                 left_type=left_type, right_type=right_type,
+                 binary_apply=binary_apply(op, "e.$0", "e.$1", cast_type, infix=infix))
