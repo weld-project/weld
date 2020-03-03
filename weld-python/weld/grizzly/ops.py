@@ -183,3 +183,34 @@ def binary_map(op, left_type, right_type, leftval, rightval, cast_type, infix=Tr
                  leftval=leftval, rightval=rightval,
                  left_type=left_type, right_type=right_type,
                  binary_apply=binary_apply(op, "e.$0", "e.$1", cast_type, infix=infix))
+
+def lookup_expr(collection, key):
+    """
+    Lookup a value in a Weld vector. This will add a cast for the key to an `I64`.
+
+    Examples
+    --------
+    >>> lookup("v", "i64(1.0f)")
+    'lookup(v, i64(i64(1.0f)))'
+    >>> lookup("[1,2,3]", "1.0f")
+    'lookup([1,2,3], i64(1.0f))'
+    >>> lookup("[1,2,3]", 1)
+    'lookup([1,2,3], i64(1))'
+
+    """
+    return "lookup({collection}, i64({key}))".format(
+            collection=collection,
+            key=key)
+
+def slice_expr(collection, start, stop):
+    """
+    Lookup a value in a Weld vector. This will add a cast the start and stop to 'I64'.
+
+    Examples
+    --------
+    >>> slice_expr("v", 1, 2, 1)
+    'slice(v, i64(1), i64(2))'
+
+    """
+    return "slice({collection}, i64({start}), i64({stop}))".format(
+            collection=collection, start=start, stop=stop)

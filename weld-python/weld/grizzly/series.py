@@ -86,7 +86,32 @@ class GrizzlySeries(pd.Series):
         Returns whether this `GrizzlySeries` wraps a physical value rather than
         a computation.
         """
-        return self.weld_value_.is_identity
+        return self.weld_value_.is_identity or hasattr(self, "evaluating_")
+
+    @property
+    def values(self):
+        """
+        Returns the raw data values of this `GrizzlySeries`. If `self.is_value`
+        is `False`, this property raises an exception.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries([1,2,3])
+        >>> x.is_value
+        True
+        >>> x.values
+        array([1, 2, 3])
+        >>> x = x + x
+        >>> x.is_value
+        False
+        >>> x.values
+        Traceback (most recent call last):
+        ...
+        weld.grizzly.error.GrizzlyError: GrizzlySeries is not evaluated and does not have values. Try calling 'evaluate()' first.
+        """
+        if not self.is_value:
+            raise GrizzlyError("GrizzlySeries is not evaluated and does not have values. Try calling 'evaluate()' first.")
+        return super(GrizzlySeries, self).values
 
     def evaluate(self):
         """
@@ -107,9 +132,11 @@ class GrizzlySeries(pd.Series):
                 super(GrizzlySeries, self).__init__(result[0].copy2numpy())
             else:
                 super(GrizzlySeries, self).__init__(result[0])
+            setattr(self, "evaluating_", 0)
             self.weld_value_ = identity(PhysicalValue(self.values,\
                     self.output_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
+            delattr(self, "evaluating_")
         return self
 
     def to_pandas(self, copy=False):
@@ -239,12 +266,90 @@ class GrizzlySeries(pd.Series):
         # Don't re-convert values if we did it once already -- it's expensive.
         return s if s is not None else pd.Series(data, dtype=dtype, index=index, **kwargs)
 
+    # ---------------------- Indexing ------------------------------
+
+    def __getitem__(self, key):
+        """
+        Access elements in a `GrizzlySeries`.
+
+        The Grizzly accessor supports scalar access (return a single element
+        from a `GrizzlySeries`) as well as masked access. Masked access returns
+        a new filtered `GrizzlySeries`, where the key is another series-like
+        object of dtype `bool` and the same length as `self`: each element
+        corresponding to `True` is kept, and each element corresponding to
+        `False` is discarded.
+
+        Note that `__getitem__()` will call `evaluate()` when a scalar key is passed,
+        but will produce a lazy value when a non-scalar key is passed (i.e., when a
+        non-scalar value will be returned).
+
+        Basic Examples
+        --------
+        >>> x = GrizzlySeries([1,2,3])
+        >>> x[1]
+        2
+        >>> y = x + x
+        >>> y[1] # Causes evaluation
+        4
+        >>> y = x + x
+        >>> z = y[0:2]
+        >>> z.evaluate()
+        0    2
+        1    4
+        dtype: int64
+        >>> y = x + x
+        >>> z = y[:2]
+        >>> z.evaluate()
+        0    2
+        1    4
+        dtype: int64
+
+        Examples with Masking
+        ---------------------
+        """
+        # If the key is a scalar
+        scalar_key = GrizzlySeries._scalar_ty(key, I64())
+        if isinstance(scalar_key, I64):
+            self.evaluate()
+            return self.values[key]
+
+        def normalize_slice_arg(arg, default=None):
+            """
+            Returns the slice argument as a Python integer, and
+            throws an error if the argument cannot be represented as such.
+
+            """
+            if arg is None:
+                if default is not None:
+                    arg = default
+                else:
+                    raise GrizzlyError("slice got 'None' when value where expected")
+            arg_ty = GrizzlySeries._scalar_ty(arg, I64())
+            if not isinstance(arg_ty, I64):
+                raise GrizzlyError("slices in __getitem__() must be integers")
+            return int(arg)
+
+        if isinstance(key, slice):
+            if key.step is not None:
+                # Don't support step yet.
+                self.evaluate()
+                return self.values[key]
+            start = normalize_slice_arg(key.start, default=0)
+            stop = normalize_slice_arg(key.stop, default=None)
+            code = slice_expr(self.weld_value_.id, start, stop)
+            dependencies = [self.weld_value_]
+            lazy = WeldLazy(code, dependencies, self.output_type, GrizzlySeries._decoder)
+            return GrizzlySeries(lazy, dtype=self.dtype)
+
+        # TODO
+        raise GrizzlyError("Series-like key in __getitem__ must be a GrizzlySeries.")
+
     # ---------------------- Operators ------------------------------
 
     @classmethod
     def _scalar_ty(cls, value, cast_ty):
         """
-        Returns the scalar type of a scalar value. If the value is not a scalar,
+        Returns the scalar Weld type of a scalar Python value. If the value is not a scalar,
         returns None. For primitive 'int' values, returns 'cast_ty'.
 
         This returns 'None' if the value type is not supported.
@@ -268,7 +373,7 @@ class GrizzlySeries(pd.Series):
         if isinstance(value, bool):
             return Bool()
 
-    def _arithmetic_binop_impl(self, other, op, truediv=False, dtype=None):
+    def _arithmetic_binop_impl(self, other, op, truediv=False, weld_elem_type=None):
         """
         Performs the operation on two `Series` elementwise.
         """
@@ -291,7 +396,7 @@ class GrizzlySeries(pd.Series):
             dependencies = [self.weld_value_, other.weld_value_]
 
         cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
-        output_type = cast_type if dtype is None else dtype
+        output_type = cast_type if weld_elem_type is None else weld_elem_type
         code = binary_map(op,
                 left_type=str(left_ty),
                 right_type=str(right_ty),
@@ -307,7 +412,7 @@ class GrizzlySeries(pd.Series):
         """
         Performs the comparison operation on two `Series` elementwise.
         """
-        return self._arithmetic_binop_impl(other, op, dtype=Bool())
+        return self._arithmetic_binop_impl(other, op, weld_elem_type=Bool())
 
     def add(self, other):
         return self._arithmetic_binop_impl(other, '+')
