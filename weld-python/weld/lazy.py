@@ -190,6 +190,8 @@ class WeldLazy(WeldNode):
 
         # Cache the compiled program.
         self.program_ = None
+        # Cache the code
+        self.code_ = None
 
     @property
     def children(self):
@@ -212,6 +214,11 @@ class WeldLazy(WeldNode):
         return self.ty_
 
     @property
+    def code(self):
+        self._assemble(compile=False)
+        return self.code_
+
+    @property
     def is_identity(self):
         return len(self.children) == 1 and isinstance(self.children[0], PhysicalValue)
 
@@ -219,25 +226,49 @@ class WeldLazy(WeldNode):
         arguments = ["{0}: {1}".format(inp.id, str(inp.output_type)) for inp in inputs]
         return "|" + ", ".join(arguments) + "|"
 
-    def evaluate(self):
-        if self.is_identity:
-            # This is a physical value -- return an empty context. The physical value
-            # should manage its own context if its owned by Weld.
-            return (self.children[0].value, None)
-        elif self.program_ is not None:
-            # If we compiled once already, use the pre-compiled program.
-            return (self.program_)(*values)
+    def _inputs(self, nodes_to_execute):
+        """
+        Returns an ordered list of inputs to this computation.
 
-        # Collect nodes in execution order.
-        nodes_to_execute = []
-        self.walk(lambda node, expressions: expressions.append(node), nodes_to_execute)
-
+        """
         # Inputs are PhysicalValue objects.
         inputs = [node for node in nodes_to_execute if isinstance(node, PhysicalValue)]
         inputs.sort(key=lambda e: e.id.name)
+        return inputs
+
+    def _assemble(self, compile=False):
+        """
+        'Assembles' the program by constructing code from the children and optionally
+        compiling it. Returns the program inputs.
+
+        Parameters
+        ----------
+        compile : boolean
+            If true, compiles the code.
+
+        Post-conditions
+        ---------------
+
+        self.code_ is not None.
+        if compile is True, self.program_ is not None.
+
+        Returns
+        -------
+        list[inputs]
+
+        """
+        # Collect nodes in execution order.
+        nodes_to_execute = []
+        self.walk(lambda node, expressions: expressions.append(node), nodes_to_execute)
+        inputs = self._inputs(nodes_to_execute)
+
+        if self.code_ is not None and self.program_ is not None:
+            return inputs
+        if self.code_ is not None and not compile:
+            return inputs
+
         arg_types = [inp.output_type for inp in inputs]
         encoders = [inp.encoder for inp in inputs]
-        values = [inp.value for inp in inputs]
 
         # Collect the expressions from the remaining nodes.
         expressions = [
@@ -246,8 +277,23 @@ class WeldLazy(WeldNode):
         assert nodes_to_execute[-1] is self
         expressions.append(str(self.id))
 
-        program = self._create_function_header(inputs) + " " + "\n".join(expressions)
-        self.program_ = weld.compile.compile(program, arg_types, encoders, self.output_type, self.decoder)
+        self.code_ = self._create_function_header(inputs) + " " + "\n".join(expressions)
+        if compile:
+            self.program_ = weld.compile.compile(self.code_, arg_types, encoders, self.output_type, self.decoder)
+        return inputs
+
+    def evaluate(self):
+        """
+        Evaluate this computation by compiling and running the encapsulated Weld program.
+
+        """
+        if self.is_identity:
+            # This is a physical value -- return an empty context. The physical value
+            # should manage its own context if its owned by Weld.
+            return (self.children[0].value, None)
+
+        inputs = self._assemble(compile=True)
+        values = [inp.value for inp in inputs]
         return (self.program_)(*values)
 
 def identity(phys_value, decoder):

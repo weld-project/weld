@@ -32,22 +32,13 @@ def _test_binop(grizzly_op, pandas_op, name):
             assert result.equals(expect), "{}, {} (op={})".format(left, right, name)
 
 def test_add():
+    # Exhaustive type-to-type test.
     _test_binop(gr.GrizzlySeries.add, pd.Series.add, "add")
-    _test_binop(gr.GrizzlySeries.__add__, pd.Series.__add__, "__add__")
 
-def test_sub():
-    _test_binop(gr.GrizzlySeries.sub, pd.Series.sub, "sub")
-    _test_binop(gr.GrizzlySeries.__sub__, pd.Series.__sub__, "__sub__")
-
-def test_mul():
-    _test_binop(gr.GrizzlySeries.mul, pd.Series.mul, "mul")
-    _test_binop(gr.GrizzlySeries.__mul__, pd.Series.__mul__, "__mul__")
-
-def test_truediv():
+def test_div():
+    # Exhaustive type-to-type test.
     _test_binop(gr.GrizzlySeries.truediv, pd.Series.truediv, "truediv")
     _test_binop(gr.GrizzlySeries.div, pd.Series.div, "div")
-    _test_binop(gr.GrizzlySeries.divide, pd.Series.divide, "divide")
-    _test_binop(gr.GrizzlySeries.__truediv__, pd.Series.__truediv__, "__truediv__")
 
 def _compare_vs_pandas(func):
     """
@@ -128,6 +119,18 @@ def test_scalar():
             a = pd.Series([1, 2, 3], dtype=left)
             expect = a + b
             assert result.equals(expect), "{}, {} (op={})".format(left, right, "scalar")
+
+def test_indexing():
+    # We don't compare with Pandas in these tests because the output
+    # doesn't always match (this is because we don't currently support indexes).
+    x = gr.GrizzlySeries(list(range(100)), dtype='int64')
+    assert x[0] == 0
+    assert x[50] == 50
+    assert np.array_equal(x[10:50].evaluate().values, np.arange(10, 50, dtype='int64'))
+    assert np.array_equal(x[:50].evaluate().values, np.arange(50, dtype='int64'))
+    assert np.array_equal(x[x > 50].evaluate().values, np.arange(51, 100, dtype='int64'))
+    assert np.array_equal(x[x == 2].evaluate().values, np.array([2], dtype='int64'))
+    assert np.array_equal(x[x < 0].evaluate().values, np.array([], dtype='int64'))
 
 def test_unsupported_binop_error():
     # Test unsupported

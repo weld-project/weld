@@ -1,127 +1,7 @@
 """
-Basic element-wise operations supported in Grizzly.
+Basic Weld element-wise operations supported in Grizzly.
 
 """
-
-from abc import ABC, abstractmethod
-import operator
-
-class Op(ABC):
-
-    @property
-    @abstractmethod
-    def name(self):
-        pass
-
-    def __eq__(self, other):
-        return self.name == other.name
-
-    def __hash__(self):
-        return hash(self.name)
-
-
-class UnaryOp(Op):
-
-    __slots__ = ['name', 'special', 'weld_name']
-
-    def __init__(self, name, special=None, weld_name=None):
-        if special is not None:
-            special.startswith("__") and special.endswith("__")
-        self.name = name
-        self.special = special
-        self.weld_name = weld_name
-
-class BinaryOp(Op):
-
-    __slots__ = ['name', "infix", 'special', 'weld_name']
-
-    def __init__(self, name, infix, special=None, weld_name=None):
-        """ Create a binary operator.
-
-        Names when doing Weld code generation are chosen as follows:
-
-        If infix is provided:
-            LEFT <infix> RIGHT
-        If weld_name is provided and infix is provided:
-            LEFT <infix> RIGHT
-        If weld_name is provided and infix is not provided:
-            weld_name(LEFT, RIGHT)
-        If weld_name is not provided and infix is not provided:
-            not allowed.
-
-        Parameters
-        ----------
-        name : str
-            The API name of this operator.
-        infix : str
-            The infix string of this operator, or None if one
-            does not exist.
-        special : str
-            A Python special method name if one exists for this op.
-        weld_name : str
-            The Weld operator name, if it doesn't exist.
-
-        """
-        assert infix is not None or weld_name is not None
-        if special is not None:
-            assert special.startswith("__") and special.endswith("__")
-        self.name = name
-        self.infix = infix
-        self.special = special
-        self.weld_name = weld_name
-
-class CompareOp(BinaryOp):
-    pass
-
-class OpRegistry(object):
-    """
-    A singleton for holding the supported operations.
-
-    Examples
-    --------
-    >>> OpRegistry.get('add')
-    <weld.grizzly.ops.BinaryOp object at ...>
-    >>> OpRegistry.get('lt')
-    <weld.grizzly.ops.CompareOp object at ...>
-    >>> OpRegistry.supports('add')
-    True
-    >>> OpRegistry.supports('fakeOperator')
-    False
-
-    """
-    OPS = {
-        # Binary operations
-        "add": BinaryOp("add", "+", "__add__"),
-        "sub": BinaryOp("sub", "-", "__sub__"),
-        "mul": BinaryOp("mul", "*", "__mul__"),
-        "div": BinaryOp("div", "/", "__truediv__"),
-        "truediv": BinaryOp("truediv", "/", "__truediv__"),
-        "mod": BinaryOp("mod", "%", "__mod__"),
-        "pow": BinaryOp("pow", None, weld_name="pow"),
-        "radd": BinaryOp("radd", "+", "__add__"),
-        "rsub": BinaryOp("rsub", "-", "__sub__"),
-        "and": BinaryOp("and", "&", "__and__"),
-        "or": BinaryOp("or", "|", "__or__"),
-        "xor": BinaryOp("xor", "^", "__xor__"),
-        # Unary operations
-        "sqrt": UnaryOp("sqrt", weld_name="sqrt"),
-        "exp": UnaryOp("exp", weld_name="exp"),
-        # Compare operations
-        "lt": CompareOp("lt", "<", "__lt__"),
-        "gt": CompareOp("gt", ">", "__gt__"),
-        "le": CompareOp("le", "<=", "__le__"),
-        "ge": CompareOp("ge", ">=", "__ge__"),
-        "ne": CompareOp("ne", "!=", "__ne__"),
-        "eq": CompareOp("eq", "==", "__eq__"),
-        }
-
-    @classmethod
-    def get(cls, name):
-        return OpRegistry.OPS[name]
-
-    @classmethod
-    def supports(cls, name):
-        return name in OpRegistry.OPS
 
 def unary_apply(op, value):
     """
@@ -183,3 +63,49 @@ def binary_map(op, left_type, right_type, leftval, rightval, cast_type, infix=Tr
                  leftval=leftval, rightval=rightval,
                  left_type=left_type, right_type=right_type,
                  binary_apply=binary_apply(op, "e.$0", "e.$1", cast_type, infix=infix))
+
+def lookup_expr(collection, key):
+    """
+    Lookup a value in a Weld vector. This will add a cast for the key to an `I64`.
+
+    Examples
+    --------
+    >>> lookup_expr("v", "i64(1.0f)")
+    'lookup(v, i64(i64(1.0f)))'
+    >>> lookup_expr("[1,2,3]", "1.0f")
+    'lookup([1,2,3], i64(1.0f))'
+    >>> lookup_expr("[1,2,3]", 1)
+    'lookup([1,2,3], i64(1))'
+
+    """
+    return "lookup({collection}, i64({key}))".format(
+            collection=collection,
+            key=key)
+
+def slice_expr(collection, start, count):
+    """
+    Lookup a value in a Weld vector. This will add a cast the start and stop to 'I64'.
+
+    Examples
+    --------
+    >>> slice_expr("v", 1, 2)
+    'slice(v, i64(1), i64(2))'
+
+    """
+    return "slice({collection}, i64({start}), i64({count}))".format(
+            collection=collection, start=start, count=count)
+
+def mask(collection, collection_ty, booleans):
+    """
+    Returns a masking operation that filters values from 'collection' using
+    the bitvector 'booleans'.
+
+    Examples
+    --------
+    >>> mask("v", "i64", "mask")
+    'map(filter(zip(v, mask), |e: {i64,bool}| e.$1), |e: {i64,bool}| e.$0)'
+
+    """
+    struct_ty = "{{{collection_ty},bool}}".format(collection_ty=collection_ty)
+    template = "map(filter(zip({collection}, {mask}), |e: {struct_ty}| e.$1), |e: {struct_ty}| e.$0)"
+    return template.format(collection=collection, mask=booleans, struct_ty=struct_ty)
