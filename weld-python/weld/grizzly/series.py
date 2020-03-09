@@ -13,7 +13,7 @@ from pandas.core.internals import SingleBlockManager
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.types import *
 
-from .ops import *
+from .weld.ops import *
 from .error import *
 
 def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
