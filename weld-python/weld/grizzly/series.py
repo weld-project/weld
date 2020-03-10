@@ -13,7 +13,7 @@ from pandas.core.internals import SingleBlockManager
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.types import *
 
-from .ops import *
+from .weld.ops import *
 from .error import *
 
 def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
@@ -304,8 +304,8 @@ class GrizzlySeries(pd.Series):
         * In Pandas, many indexing operations just modify the index on the Series. In
         Grizzly, we instead register a lazy computation and return a new GrizzlySeries
         that always effectively has a RangeIndex (note that Grizzly does not actually
-        support indexes at the moment). This means that some indexing information is
-        lost in Grizzly. Here is an example of where a difference arises:
+        support indexes at the moment). This means that the index is currently **always
+        dropped** in Grizzly. Here is an example of where a difference arises:
 
         >>> p1 = pd.Series([1,2,3])
         >>> p2 = pd.Series([4,5])
@@ -321,6 +321,7 @@ class GrizzlySeries(pd.Series):
         1    8
         dtype: int64
 
+        This is equivalent to always calling `Series.reset_index(drop=True)` in Pandas.
         Note that this behavior may change in the future when we add support for indexes.
 
         Basic Examples
