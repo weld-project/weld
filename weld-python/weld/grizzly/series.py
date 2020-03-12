@@ -389,9 +389,7 @@ class GrizzlySeries(pd.Series):
             start = normalize_slice_arg(key.start, default=0)
             stop = normalize_slice_arg(key.stop, default=None)
             # Weld's slice operator takes a size instead of a stopping index.
-            code = slice_expr(self.weld_value_.id, start, stop - start)
-            dependencies = [self.weld_value_]
-            lazy = WeldLazy(code, dependencies, self.output_type, GrizzlySeries._decoder)
+            lazy = slice_expr(self.weld_value_, start, stop - start)(self.output_type, GrizzlySeries._decoder)
             return GrizzlySeries(lazy, dtype=self.dtype)
 
         if not isinstance(key, GrizzlySeries):
@@ -428,9 +426,7 @@ class GrizzlySeries(pd.Series):
                 not isinstance(bool_mask.output_type.elem_type, Bool):
                     raise GrizzlyError("bool_mask must be a GrizzlySeries with dtype=bool")
 
-        code = mask(self.weld_value_.id, self.output_type.elem_type, bool_mask.weld_value_.id)
-        dependencies = [self.weld_value_, bool_mask.weld_value_]
-        lazy = WeldLazy(code, dependencies, self.output_type, GrizzlySeries._decoder)
+        lazy = mask(self.weld_value_, self.output_type.elem_type, bool_mask.weld_value_)(self.output_type, GrizzlySeries._decoder)
         return GrizzlySeries(lazy, dtype=self.dtype)
 
     # ---------------------- Operators ------------------------------
@@ -473,27 +469,23 @@ class GrizzlySeries(pd.Series):
             # as dependencies.
             right_ty = scalar_ty
             rightval = str(other)
-            dependencies = [self.weld_value_]
         else:
             # Value is not a scalar -- for now, we require collection types to be
             # GrizzlySeries.
             if not isinstance(other, GrizzlySeries):
                 raise GrizzlyError("RHS of binary operator must be a GrizzlySeries")
             right_ty = other.output_type.elem_type
-            rightval = str(other.weld_value_.id)
-            dependencies = [self.weld_value_, other.weld_value_]
+            rightval = other.weld_value_
 
         cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
         output_type = cast_type if weld_elem_type is None else weld_elem_type
-        code = binary_map(op,
+        lazy = binary_map(op,
                 left_type=str(left_ty),
                 right_type=str(right_ty),
-                leftval=str(self.weld_value_.id),
+                leftval=self.weld_value_,
                 rightval=rightval,
                 scalararg=scalar_ty is not None,
-                cast_type=cast_type)
-        lazy = WeldLazy(code, dependencies,
-                WeldVec(output_type), GrizzlySeries._decoder)
+                cast_type=cast_type)(WeldVec(output_type), GrizzlySeries._decoder)
         return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(output_type))
 
     def _compare_binop_impl(self, other, op):
