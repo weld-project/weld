@@ -305,10 +305,11 @@ def identity(phys_value, decoder):
 
 class WeldFunc(object):
     """
-    The result of a function annotated with `welfunc`.
+    The result of a function annotated with `weldfunc`.
 
-    This object is effectively a function with a field `code`, which extracts the raw code
-    constructed by the annotated function without constructing a `WeldLazy`.
+    This object is effectively a function with a field `code`, which extracts
+    the raw code constructed by the annotated function without constructing a
+    `WeldLazy`.
 
     """
 
@@ -357,11 +358,14 @@ def weldfunc(func):
     True
 
     """
+    # Wrap function to maintain docs etc.
     @functools.wraps(func)
     def weldfunc_wrapper(*args, **kwargs):
         new_args = list()
         new_kwargs = dict()
         dependencies = []
+        # Create a new argument list with WeldLazy replaced with their
+        # id. Also add each WeldLazy to the dependencies list.
         for arg in args:
             if isinstance(arg, WeldLazy):
                 new_args.append(str(arg.id))
