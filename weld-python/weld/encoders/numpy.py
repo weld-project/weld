@@ -18,7 +18,10 @@ import ctypes
 import numpy as np
 
 from .encoder_base import *
-from ..types import *
+from weld.types import *
+
+# We just need this for the path.
+import weld.encoders._strings
 
 class weldbasearray(np.ndarray):
     """ A NumPy array possibly backed by a `WeldContext`.
@@ -90,7 +93,7 @@ _known_types = {
         'float': F64(),
         'double': F64(),
         'float64': F64(),
-        'bool': Bool()
+        'bool': Bool(),
         # Numpy bytestring
         'S': WeldVec(I8()),
         }
@@ -196,7 +199,6 @@ def binop_output_type(left_ty, right_ty, truediv=False):
                 # For higher precisions, always cast to f64.
                 return F64()
 
-
 def weld_type_to_dtype(ty):
     """Converts a Weld type to a NumPy dtype.
 
@@ -263,6 +265,40 @@ def dtype_to_weld_type(ty):
         ty = 'S'
     return _known_types.get(ty)
 
+class StringConversionFuncs(object):
+    """
+    Wrapper around string functions from the _strings module.
+
+    """
+
+    stringfuncs = ctypes.PyDLL(weld.encoders._strings.__file__)
+    string_cclass = WeldVec(I8()).ctype_class
+
+    @staticmethod
+    def numpy_string_array_to_weld(arr):
+        func = StringConversionFuncs.stringfuncs.NumpyArrayOfStringsToWeld
+        func.argtypes = [ctypes.py_object]
+        func.restype = StringConversionFuncs.string_cclass
+
+        # Verify that the array is a NumPy array that we support.
+        if not isinstance(arr, np.ndarray):
+            raise TypeError("Expected a 'np.ndarray instance'")
+        if arr.dtype.char != 'S':
+            raise TypeError("dtype string ndarray must be 'S'")
+
+        result = func(arr)
+        return result
+
+    @staticmethod
+    def weld_string_array_to_numpy(arr):
+        func = StringConversionFuncs.stringfuncs.WeldArrayOfStringsToNumPy
+        func.argtypes = [StringConversionFuncs.string_cclass]
+        func.restype = ctypes.py_object
+        result = func(arr)
+        assert result.dtype.char == 'S'
+        return result
+
+
 class NumPyWeldEncoder(WeldEncoder):
 
     @staticmethod
@@ -316,7 +352,6 @@ class NumPyWeldEncoder(WeldEncoder):
                 raise NotImplementedError
         else:
             raise TypeError("Unexpected type {} in NumPy encoder".format(type(obj)))
-
 
 class NumPyWeldDecoder(WeldDecoder):
     """ Decodes an encoded Weld array into a NumPy array.

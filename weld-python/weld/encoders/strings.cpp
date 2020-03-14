@@ -35,7 +35,7 @@ extern "C" {
   /// Converts a Numpy array of Python strings to an Weld vector of strings.
   ///
   /// We only support strings with a dtype of 'S' for now, which indicates a bytearray.
-  Vector<Vector<int8_t>> NumpyArrayOfStringsToWeld(PyObject *self, PyObject* in) {
+  Vector<Vector<int8_t>> NumpyArrayOfStringsToWeld(PyObject* in) {
     PyArrayObject* inp = reinterpret_cast<PyArrayObject*>(in);
     if (PyArray_DESCR(inp)->kind != 'S') {
       // Returns an empty vector.
@@ -96,11 +96,20 @@ extern "C" {
     return out;
   }
 
-  /// Python module definition
-  static PyMethodDef FputsMethods[] = {
-    {"NumpyArrayOfStringsToWeld", NumpyArrayOfStringsToWeld, METH_VARARGS, "Python interface for fputs C library function"},
-    {NULL, NULL, 0, NULL}
+  // Define this to be a module with no methods -- we'll load it as a dynamic library and call it with ctypes directly.
+  static PyMethodDef methods[] = { {NULL, NULL, 0, NULL} };
+
+  static struct PyModuleDef module = {
+    PyModuleDef_HEAD_INIT,
+    "_strings",
+    "",
+    -1,
+    methods
   };
+
+  PyMODINIT_FUNC PyInit__strings(void) {
+    return PyModule_Create(&module);
+  }
 
 } // extern "C"
 
