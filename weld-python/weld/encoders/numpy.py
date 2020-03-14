@@ -91,6 +91,8 @@ _known_types = {
         'double': F64(),
         'float64': F64(),
         'bool': Bool()
+        # Numpy bytestring
+        'S': WeldVec(I8()),
         }
 
 # Reverse of the above.
@@ -142,7 +144,7 @@ def binop_output_type(left_ty, right_ty, truediv=False):
     both_uint = left_ty in uint_types and right_ty in uint_types
     both_int = left_ty in int_types and right_ty in int_types
 
-    if has_float: 
+    if has_float:
         if max_size <= 4:
             if left_size != right_size:
                 # float and something smaller: use float
@@ -216,7 +218,7 @@ def weld_type_to_dtype(ty):
     -------
     dtype or None
         Returns None if the type is not recognized.
-    
+
     """
     if ty in _known_types_weld2dtype:
         return np.dtype(_known_types_weld2dtype[ty])
@@ -257,6 +259,8 @@ def dtype_to_weld_type(ty):
     if not isinstance(ty, np.dtype):
         ty = np.dtype(ty)
     ty = str(ty)
+    if ty.startswith('|S'):
+        ty = 'S'
     return _known_types.get(ty)
 
 class NumPyWeldEncoder(WeldEncoder):
