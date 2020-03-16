@@ -3,6 +3,7 @@ import weld.compile
 
 from abc import ABC, abstractmethod
 from collections import namedtuple
+import functools
 
 class NodeId(object):
     """
@@ -301,3 +302,87 @@ def identity(phys_value, decoder):
     Creates an identity `WeldLazy` from a `PhysicalValue` and decoder.
     """
     return WeldLazy(str(phys_value.id), [phys_value], phys_value.output_type, decoder)
+
+class WeldFunc(object):
+    """
+    The result of a function annotated with `weldfunc`.
+
+    This object is effectively a function with a field `code`, which extracts
+    the raw code constructed by the annotated function without constructing a
+    `WeldLazy`.
+
+    """
+
+    __slots__ = ["_code", "_dependencies"]
+
+    def __init__(self, code, dependencies):
+        self._code = code
+        self._dependencies = dependencies
+
+    @property
+    def code(self):
+        return self._code
+
+    def __call__(self, weld_output_type, decoder):
+        return WeldLazy(self.code, self._dependencies, weld_output_type, decoder)
+
+def weldfunc(func):
+    """
+    An annotation for converting functions that return Weld strings into functions
+    that return `WeldLazy`.
+
+    A function annotated with `weldfunc` takes zero or more arguments and
+    returns a Weld string as a result. The annotation converts this function
+    into a one that returns a _partial function_ that returns a `WeldLazy`. The
+    `WeldLazy` represents the computation constructed by the annotated
+    function. The partial function takes two arguments: an output Weld type,
+    and a Weld decoder.
+
+    The decorated function automatically sets the dependencies of the resulting
+    `WeldLazy`: every `WeldLazy` argument passed to the annotated function
+    becomes a dependency. The annotation will unwrap `WeldLazy.id` and pass it
+    to the annotated function.
+
+    Examples
+    --------
+    >>> from weld.types import F64
+    >>> sqrt = lambda a: "sqrt({})".format(a)
+    >>> sqrt = weldfunc(sqrt)
+    >>> v1 = sqrt("1")(F64(), None)
+    >>> v1.expression
+    'sqrt(1)'
+    >>> v2 = sqrt(v1)(F64(), None) # v1 becomes a dependency of v2
+    >>> v2.expression == "sqrt({})".format(v1.id)
+    True
+    >>> v1 in v2.children
+    True
+
+    """
+    # Wrap function to maintain docs etc.
+    @functools.wraps(func)
+    def weldfunc_wrapper(*args, **kwargs):
+        new_args = list()
+        new_kwargs = dict()
+        dependencies = []
+        # Create a new argument list with WeldLazy replaced with their
+        # id. Also add each WeldLazy to the dependencies list.
+        for arg in args:
+            if isinstance(arg, WeldLazy):
+                new_args.append(str(arg.id))
+                dependencies.append(arg)
+            else:
+                new_args.append(arg)
+        for (k, v) in kwargs.items():
+            if isinstance(v, WeldLazy):
+                new_kwargs[k] = str(v.id)
+                dependencies.append(v)
+            else:
+                new_kwargs[k] = v
+
+        assert len(new_args) == len(args)
+        assert len(new_kwargs) == len(kwargs)
+
+        code = func(*new_args, **new_kwargs)
+        return WeldFunc(code, dependencies)
+
+    return weldfunc_wrapper
