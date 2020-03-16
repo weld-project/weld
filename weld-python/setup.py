@@ -10,7 +10,7 @@ from setuptools_rust import RustExtension
 setup_requires = ["numpy", "setuptools-rust>=0.10.1", "wheel"]
 install_requires = ["pandas"]
 
-# Encoding nd decoding for strings.
+# Encoding and decoding for strings.
 stringencdec = Extension('weld.encoders._strings',
                     include_dirs = ['/usr/local/lib', numpy.get_include(),
                         sysconfig.get_paths()['include']],
