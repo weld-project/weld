@@ -22,8 +22,8 @@ class Vector {
     data = new T[length];
   }
 
-  int64_t length;
   T* data;
+  int64_t length;
 
 };
 
@@ -42,16 +42,26 @@ extern "C" {
       return Vector<Vector<int8_t>>();
     }
 
+    int64_t nd = static_cast<int64_t>(PyArray_NDIM(inp));
+    if (nd != 1) {
+      // String vectors should alays have a dimension of 1.
+      return Vector<Vector<int8_t>>();
+    }
+
     int64_t num_strings = static_cast<int64_t>(PyArray_DIMS(inp)[0]);
+    // Maximum length of any string.
+    int64_t stride = static_cast<int64_t>(PyArray_STRIDES(inp)[0]);
     int8_t* data = reinterpret_cast<int8_t*>(PyArray_DATA(inp));
     int8_t* base = data;
 
+    // TODO(shoumik.palkar): How to free this?
     Vector<Vector<int8_t>> output(num_strings);
 
     for (long i = 0; i < num_strings; ++i) {
-      output.data[i].length = strlen(reinterpret_cast<char*>(data));
-      output.data[i].data = reinterpret_cast<int8_t*>(base + i * inp->strides[0]);
-      data += (PyArray_STRIDES(inp)[0]);
+      output.data[i].length = strnlen(reinterpret_cast<char*>(data), stride);
+      // TODO(shoumik.palkar): This array should hold a reference to the Python object.
+      output.data[i].data = reinterpret_cast<int8_t*>(base + i * stride);
+      data += stride;
     }
     return output;
   }
@@ -66,8 +76,9 @@ extern "C" {
   PyObject* WeldArrayOfStringsToNumPy(Vector<Vector<int8_t>> inp) {
     Py_Initialize();
 
-    // Stride is the size of the largest string.
-    npy_intp stride = std::numeric_limits<npy_intp>::min();
+    // Stride is the size of the largest string. The minimum stride is 1 (for an empty string):
+    // in this case, each string is just a single 0-valued byte.
+    npy_intp stride = 1;
     for (long i = 0; i < inp.length; ++i) {
       if (inp.data[i].length > stride) {
         stride = inp.data[i].length;
@@ -78,6 +89,8 @@ extern "C" {
 
     // TODO(shoumik.palkar): How do we free this?
     int8_t* buffer = new int8_t[stride * inp.length];
+    // Strings with lengths less than stride must be null-terminated.
+    memset(buffer, 0, stride * inp.length);
     // Make sure the allocation succeeded.
     if (buffer == nullptr) {
       return nullptr;
@@ -86,13 +99,14 @@ extern "C" {
     for (long i = 0; i < inp.length; i++) {
       // memcpy each of the strings.
       memcpy(buffer + i * stride, inp.data[i].data, inp.data[i].length);
-      // This format expects a null-terminated byte.
-      buffer[i * stride + inp.data[i].length] = 0;
     }
 
     // Construct the NumPy array.
-    npy_intp dims = static_cast<npy_intp>(inp.length);
-    PyObject* out = PyArray_New(&PyArray_Type, 1, &dims, NPY_STRING,  &stride, reinterpret_cast<void*>(buffer), stride, 0, nullptr);
+    const npy_intp dims[] = { static_cast<npy_intp>(inp.length) };
+    const npy_intp strides[] = { stride };
+    PyObject* out = PyArray_New(&PyArray_Type, /*nd=*/1, dims, NPY_STRING,
+                                /*strides=*/strides, reinterpret_cast<void*>(buffer),
+                                /*itemsize=*/stride, /*flags=*/0, nullptr);
     return out;
   }
 

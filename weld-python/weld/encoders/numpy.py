@@ -94,8 +94,6 @@ _known_types = {
         'double': F64(),
         'float64': F64(),
         'bool': Bool(),
-        # Numpy bytestring
-        'S': WeldVec(I8()),
         }
 
 # Reverse of the above.
@@ -261,8 +259,6 @@ def dtype_to_weld_type(ty):
     if not isinstance(ty, np.dtype):
         ty = np.dtype(ty)
     ty = str(ty)
-    if ty.startswith('|S'):
-        ty = 'S'
     return _known_types.get(ty)
 
 class StringConversionFuncs(object):
@@ -331,6 +327,9 @@ class NumPyWeldEncoder(WeldEncoder):
 
         """
         elem_type = dtype_to_weld_type(array.dtype)
+        if elem_type is None:
+            raise NotImplementedError
+
         vec_type = WeldVec(elem_type)
 
         if check_type is not None:
@@ -344,7 +343,20 @@ class NumPyWeldEncoder(WeldEncoder):
         vec.size = length
         return vec
 
+    @staticmethod
+    def _is_string_array(obj):
+        if not isinstance(obj, np.ndarray):
+            return False
+        if obj.ndim != 1:
+            return False
+        if obj.dtype.char != 'S':
+            return False
+        return True
+
     def encode(self, obj, ty):
+        if NumPyWeldEncoder._is_string_array(obj):
+            assert ty == WeldVec(WeldVec(I8()))
+            return StringConversionFuncs.numpy_string_array_to_weld(obj)
         if isinstance(obj, np.ndarray):
             if obj.ndim == 1:
                 return NumPyWeldEncoder._convert_1d_array(obj, check_type=ty)
@@ -388,7 +400,7 @@ class NumPyWeldDecoder(WeldDecoder):
         buf_from_mem.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_int)
         return buf_from_mem(c_pointer, arr_size, 0x100)
 
-
+    @staticmethod
     def _numpy_type(weld_type):
         """Infers the ndarray dimensions and dtype from a Weld type.
 
@@ -431,10 +443,25 @@ class NumPyWeldDecoder(WeldDecoder):
                 raise TypeError("unknown element type {}".format(elem_type))
         return (dimension, inner_ty)
 
+    @staticmethod
+    def _is_string_array(restype):
+        """
+        Determine whether restype is an array of strings.
+
+        This is the case if the type is `vec[vec[i8]]`.
+
+        """
+        if isinstance(restype,  WeldVec):
+            if isinstance(restype.elem_type, WeldVec):
+                if isinstance(restype.elem_type.elem_type, I8):
+                    return True
+        return False
 
     def decode(self, obj, restype, context=None):
         # A 1D NumPy array
         obj = obj.contents
+        if NumPyWeldDecoder._is_string_array(restype):
+            return weldbasearray(StringConversionFuncs.weld_string_array_to_numpy(obj), weld_context=context)
         (dims, dtype) = NumPyWeldDecoder._numpy_type(restype)
         if dims == 1:
             elem_type = restype.elem_type
