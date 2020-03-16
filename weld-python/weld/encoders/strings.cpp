@@ -15,7 +15,7 @@ template <typename T>
 class Vector {
  public:
   /// Default constructor.
-  Vector() : length(0), data(nullptr) {}
+  Vector() : data(nullptr), length(0) {}
 
   /// Creates a new empty vector with space for `length` elements.
   explicit Vector(int64_t capacity) : length(capacity) {
@@ -102,8 +102,8 @@ extern "C" {
     }
 
     // Construct the NumPy array.
-    const npy_intp dims[] = { static_cast<npy_intp>(inp.length) };
-    const npy_intp strides[] = { stride };
+    npy_intp dims[] = { static_cast<npy_intp>(inp.length) };
+    npy_intp strides[] = { stride };
     PyObject* out = PyArray_New(&PyArray_Type, /*nd=*/1, dims, NPY_STRING,
                                 /*strides=*/strides, reinterpret_cast<void*>(buffer),
                                 /*itemsize=*/stride, /*flags=*/0, nullptr);
