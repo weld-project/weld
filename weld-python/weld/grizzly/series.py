@@ -19,8 +19,7 @@ from .error import *
 def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
     """
     A flexible constructor for Series._constructor, which needs to be able
-    to fall back to a Series (if a certain operation does not produce
-    geometries)
+    to fall back to a Series (if a certain operation cannot produce GrizzlySeries).
     """
     try:
         return GrizzlySeries(data=data, **kwargs)
@@ -33,16 +32,75 @@ class StringMethods(object):
 
     """
 
+    __slots__ = [ "series" ]
+
     def __init__(self, series):
-        # TODO(soumik.palkar): This probably needs to take an extension array, because
-        # Pandas doesn't like the 'S' dtype.
         if series.dtype.char != 'S':
             raise ValueError("StringMethods only available for Series with dtype 'S'")
         self.series = series
 
+    def to_pandas(self):
+        """
+        Convert a GrizzlySeries of strings to a Pandas series.
+
+        We provide a specialized implementation of `to_pandas` here that will perform UTF-8 decoding
+        of the raw bytestrings that Grizzly series operate over.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["Welcome", "to", "Grizzly!"])
+        >>> x
+        0     b'Welcome'
+        1          b'to'
+        2    b'Grizzly!'
+        dtype: bytes64
+        >>> x.str.to_pandas()
+        0     Welcome
+        1          to
+        2    Grizzly!
+        dtype: object
+
+        """
+        return self.series.evaluate().to_pandas().str.decode("utf-8")
+
+    def _apply(self, func):
+        """
+        Apply the given weldfunc to `self.series` and return a new GrizzlySeries.
+
+        """
+        lazy = func(self.series.weld_value_)(self.series.output_type, GrizzlySeries._decoder)
+        return GrizzlySeries(lazy, dtype='S')
+
     def lower(self):
-        lazy = weldstr.lower(self.weld_value_)(self.output_type, GrizzlySeries._decoder)
-        return GrizzlySeries(lazy, dtype=self.dtype)
+        """
+        Lowercase strings in a GrizzlySeries.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["HELLO", "WorLD"])
+        >>> x.str.lower().str.to_pandas()
+        0    hello
+        1    world
+        dtype: object
+
+        """
+        return self._apply(weldstr.lower)
+
+    def upper(self):
+        """
+        Uppercase strings in a GrizzlySeries.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "WorlD"])
+        >>> x.str.upper().str.to_pandas()
+        0    HELLO
+        1    WORLD
+        dtype: object
+
+        """
+        return self._apply(weldstr.upper)
+
 
 class GrizzlySeries(pd.Series):
     """
@@ -266,7 +324,7 @@ class GrizzlySeries(pd.Series):
         s = None
         if isinstance(data, WeldLazy):
             self = super(GrizzlySeries, cls).__new__(cls)
-            super(GrizzlySeries, self).__init__(None, dtype=dtype, **kwargs)
+            super(GrizzlySeries, self).__init__(np.array([], dtype=dtype), **kwargs)
             self.weld_value_ = data
             return self
 
@@ -280,7 +338,13 @@ class GrizzlySeries(pd.Series):
             # Unsupported arguments present: bail for now.
             return pd.Series(data, dtype=dtype, index=index, **kwargs)
 
-        if not isinstance(data, np.ndarray):
+        if isinstance(data, list) and len(data) > 0 and isinstance(data[0], str):
+            # Try to convert a list of strings into a supported Numpy array.
+            data = np.array(data, dtype='S')
+
+        if isinstance(data, pd.Series):
+            data = data.values
+        elif not isinstance(data, np.ndarray):
             # First, convert the input into a Series backed by an ndarray.
              s = pd.Series(data, dtype=dtype, index=index, **kwargs)
              data = s.values
