@@ -18,7 +18,10 @@ import ctypes
 import numpy as np
 
 from .encoder_base import *
-from ..types import *
+from weld.types import *
+
+# We just need this for the path.
+import weld.encoders._strings
 
 class weldbasearray(np.ndarray):
     """ A NumPy array possibly backed by a `WeldContext`.
@@ -90,7 +93,7 @@ _known_types = {
         'float': F64(),
         'double': F64(),
         'float64': F64(),
-        'bool': Bool()
+        'bool': Bool(),
         }
 
 # Reverse of the above.
@@ -142,7 +145,7 @@ def binop_output_type(left_ty, right_ty, truediv=False):
     both_uint = left_ty in uint_types and right_ty in uint_types
     both_int = left_ty in int_types and right_ty in int_types
 
-    if has_float: 
+    if has_float:
         if max_size <= 4:
             if left_size != right_size:
                 # float and something smaller: use float
@@ -194,7 +197,6 @@ def binop_output_type(left_ty, right_ty, truediv=False):
                 # For higher precisions, always cast to f64.
                 return F64()
 
-
 def weld_type_to_dtype(ty):
     """Converts a Weld type to a NumPy dtype.
 
@@ -216,7 +218,7 @@ def weld_type_to_dtype(ty):
     -------
     dtype or None
         Returns None if the type is not recognized.
-    
+
     """
     if ty in _known_types_weld2dtype:
         return np.dtype(_known_types_weld2dtype[ty])
@@ -259,6 +261,40 @@ def dtype_to_weld_type(ty):
     ty = str(ty)
     return _known_types.get(ty)
 
+class StringConversionFuncs(object):
+    """
+    Wrapper around string functions from the _strings module.
+
+    """
+
+    stringfuncs = ctypes.PyDLL(weld.encoders._strings.__file__)
+    string_cclass = WeldVec(I8()).ctype_class
+
+    @staticmethod
+    def numpy_string_array_to_weld(arr):
+        func = StringConversionFuncs.stringfuncs.NumpyArrayOfStringsToWeld
+        func.argtypes = [ctypes.py_object]
+        func.restype = StringConversionFuncs.string_cclass
+
+        # Verify that the array is a NumPy array that we support.
+        if not isinstance(arr, np.ndarray):
+            raise TypeError("Expected a 'np.ndarray instance'")
+        if arr.dtype.char != 'S':
+            raise TypeError("dtype string ndarray must be 'S'")
+
+        result = func(arr)
+        return result
+
+    @staticmethod
+    def weld_string_array_to_numpy(arr):
+        func = StringConversionFuncs.stringfuncs.WeldArrayOfStringsToNumPy
+        func.argtypes = [StringConversionFuncs.string_cclass]
+        func.restype = ctypes.py_object
+        result = func(arr)
+        assert result.dtype.char == 'S'
+        return result
+
+
 class NumPyWeldEncoder(WeldEncoder):
 
     @staticmethod
@@ -291,6 +327,9 @@ class NumPyWeldEncoder(WeldEncoder):
 
         """
         elem_type = dtype_to_weld_type(array.dtype)
+        if elem_type is None:
+            raise NotImplementedError
+
         vec_type = WeldVec(elem_type)
 
         if check_type is not None:
@@ -304,7 +343,20 @@ class NumPyWeldEncoder(WeldEncoder):
         vec.size = length
         return vec
 
+    @staticmethod
+    def _is_string_array(obj):
+        if not isinstance(obj, np.ndarray):
+            return False
+        if obj.ndim != 1:
+            return False
+        if obj.dtype.char != 'S':
+            return False
+        return True
+
     def encode(self, obj, ty):
+        if NumPyWeldEncoder._is_string_array(obj):
+            assert ty == WeldVec(WeldVec(I8()))
+            return StringConversionFuncs.numpy_string_array_to_weld(obj)
         if isinstance(obj, np.ndarray):
             if obj.ndim == 1:
                 return NumPyWeldEncoder._convert_1d_array(obj, check_type=ty)
@@ -312,7 +364,6 @@ class NumPyWeldEncoder(WeldEncoder):
                 raise NotImplementedError
         else:
             raise TypeError("Unexpected type {} in NumPy encoder".format(type(obj)))
-
 
 class NumPyWeldDecoder(WeldDecoder):
     """ Decodes an encoded Weld array into a NumPy array.
@@ -349,7 +400,7 @@ class NumPyWeldDecoder(WeldDecoder):
         buf_from_mem.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_int)
         return buf_from_mem(c_pointer, arr_size, 0x100)
 
-
+    @staticmethod
     def _numpy_type(weld_type):
         """Infers the ndarray dimensions and dtype from a Weld type.
 
@@ -392,10 +443,25 @@ class NumPyWeldDecoder(WeldDecoder):
                 raise TypeError("unknown element type {}".format(elem_type))
         return (dimension, inner_ty)
 
+    @staticmethod
+    def _is_string_array(restype):
+        """
+        Determine whether restype is an array of strings.
+
+        This is the case if the type is `vec[vec[i8]]`.
+
+        """
+        if isinstance(restype,  WeldVec):
+            if isinstance(restype.elem_type, WeldVec):
+                if isinstance(restype.elem_type.elem_type, I8):
+                    return True
+        return False
 
     def decode(self, obj, restype, context=None):
         # A 1D NumPy array
         obj = obj.contents
+        if NumPyWeldDecoder._is_string_array(restype):
+            return weldbasearray(StringConversionFuncs.weld_string_array_to_numpy(obj), weld_context=context)
         (dims, dtype) = NumPyWeldDecoder._numpy_type(restype)
         if dims == 1:
             elem_type = restype.elem_type

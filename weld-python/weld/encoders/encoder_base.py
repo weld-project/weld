@@ -4,6 +4,7 @@ objects and Weld.
 """
 
 from abc import ABC, abstractmethod
+from weld.error import WeldError
 
 class WeldEncoder(ABC):
     """

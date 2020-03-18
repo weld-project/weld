@@ -63,7 +63,7 @@ def test_baseweldarray_basics():
         pass
 
 # Tests for encoding and decoding 1D arrays
- 
+
 def test_bool_vec():
     # Booleans in NumPy, like in Weld, are represented as bytes.
     encdec(np.array([True, True, False, False, True], dtype='bool'),
