@@ -28,7 +28,9 @@ def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
 
 class StringMethods(object):
     """
-    String methods for Grizzly Series.
+    String methods for Grizzly. Currently, string methods only apply to ASCII
+    strings; while users can pass UTF-8 strings into Grizzly, their codepoints
+    will be ignored by the below operations and will be returned unmodified.
 
     """
 
@@ -63,17 +65,17 @@ class StringMethods(object):
         """
         return self.series.evaluate().to_pandas().str.decode("utf-8")
 
-    def _apply(self, func):
+    def _apply(self, func, *args):
         """
         Apply the given weldfunc to `self.series` and return a new GrizzlySeries.
 
         """
-        lazy = func(self.series.weld_value_)(self.series.output_type, GrizzlySeries._decoder)
+        lazy = func(self.series.weld_value_, *args)(self.series.output_type, GrizzlySeries._decoder)
         return GrizzlySeries(lazy, dtype='S')
 
     def lower(self):
         """
-        Lowercase strings in a GrizzlySeries.
+        Lowercase strings.
 
         Examples
         --------
@@ -88,7 +90,7 @@ class StringMethods(object):
 
     def upper(self):
         """
-        Uppercase strings in a GrizzlySeries.
+        Uppercase strings.
 
         Examples
         --------
@@ -100,6 +102,57 @@ class StringMethods(object):
 
         """
         return self._apply(weldstr.upper)
+
+    def capitalize(self):
+        """
+        Capitalize the first character in each string.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "worlD"])
+        >>> x.str.capitalize().str.to_pandas()
+        0    Hello
+        1    World
+        dtype: object
+
+        """
+        return self._apply(weldstr.capitalize)
+
+    def get(self, index):
+        """
+        Get the character at index 'i' from each string. If 'index' is greater than
+        the string length, this returns an empty string. If 'index' is less than 0,
+        this wraps around, using Python's indexing behavior.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "worlD"])
+        >>> x.str.get(4).str.to_pandas()
+        0    o
+        1    D
+        dtype: object
+        >>> x.str.get(-3).str.to_pandas()
+        0    l
+        1    r
+        dtype: object
+
+        """
+        return self._apply(weldstr.get, index)
+
+    def strip(self):
+        """
+        Strip whitespace from the string.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["     hello   ", "   world    \t  "])
+        >>> x.str.strip().str.to_pandas()
+        0    hello
+        1    world
+        dtype: object
+
+        """
+        return self._apply(weldstr.strip)
 
 
 class GrizzlySeries(pd.Series):
