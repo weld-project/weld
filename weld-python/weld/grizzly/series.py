@@ -65,13 +65,18 @@ class StringMethods(object):
         """
         return self.series.evaluate().to_pandas().str.decode("utf-8")
 
-    def _apply(self, func, *args):
+    def _apply(self, func, *args, return_weld_elem_type=None):
         """
         Apply the given weldfunc to `self.series` and return a new GrizzlySeries.
 
+        If the return type of the result is not a string GrizzlySeries, pass
+        'return_weld_elem_type' to specify the element type of the result.
+
         """
-        lazy = func(self.series.weld_value_, *args)(self.series.output_type, GrizzlySeries._decoder)
-        return GrizzlySeries(lazy, dtype='S')
+        output_type = self.series.output_type if return_weld_elem_type is None else WeldVec(return_weld_elem_type)
+        dtype = 'S' if return_weld_elem_type is None else wenp.weld_type_to_dtype(return_weld_elem_type)
+        lazy = func(self.series.weld_value_, *args)(output_type, GrizzlySeries._decoder)
+        return GrizzlySeries(lazy, dtype=dtype)
 
     def lower(self):
         """
@@ -153,6 +158,25 @@ class StringMethods(object):
 
         """
         return self._apply(weldstr.strip)
+
+    def contains(self, pat):
+        """
+        Returns whether each string contains the provided pattern.
+
+        Pattern must be a Python string.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x.str.contains('wor').evaluate()
+        0    False
+        1     True
+        dtype: bool
+
+        """
+        if not isinstance(pat, str):
+            raise TypeError("pattern in contains must be a Python 'str'")
+        return self._apply(weldstr.contains, pat, return_weld_elem_type=Bool())
 
 
 class GrizzlySeries(pd.Series):
@@ -367,9 +391,9 @@ class GrizzlySeries(pd.Series):
         >>> x = GrizzlySeries(np.ones(5))
         >>> x.__class__
         <class 'weld.grizzly.series.GrizzlySeries'>
-        >>> y = GrizzlySeries(['hi', 'bye']) # Unsupported
+        >>> y = GrizzlySeries(['hi', 'bye'])
         >>> y.__class__
-        <class 'pandas.core.series.Series'>
+        <class 'weld.grizzly.series.GrizzlySeries'>
         >>> y = GrizzlySeries([1, 2, 3], index=[1, 0, 2]) # Unsupported
         >>> y.__class__
         <class 'pandas.core.series.Series'>
