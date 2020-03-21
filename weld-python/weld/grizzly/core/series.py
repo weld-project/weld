@@ -8,19 +8,18 @@ import pandas as pd
 import warnings
 
 import weld.encoders.numpy as wenp
+import weld.grizzly.weld.str as weldstr
 
-from pandas.core.internals import SingleBlockManager
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
+from weld.grizzly.weld.ops import *
+from weld.grizzly.core.error import GrizzlyError
+from weld.grizzly.core.strings import StringMethods
 from weld.types import *
-
-from .weld.ops import *
-from .error import *
 
 def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
     """
     A flexible constructor for Series._constructor, which needs to be able
-    to fall back to a Series (if a certain operation does not produce
-    geometries)
+    to fall back to a Series (if a certain operation cannot produce GrizzlySeries).
     """
     try:
         return GrizzlySeries(data=data, **kwargs)
@@ -114,7 +113,7 @@ class GrizzlySeries(pd.Series):
         >>> x.values
         Traceback (most recent call last):
         ...
-        weld.grizzly.error.GrizzlyError: GrizzlySeries is not evaluated and does not have values. Try calling 'evaluate()' first.
+        weld.grizzly.core.error.GrizzlyError: GrizzlySeries is not evaluated and does not have values. Try calling 'evaluate()' first.
         """
         if not self.is_value:
             raise GrizzlyError("GrizzlySeries is not evaluated and does not have values. Try calling 'evaluate()' first.")
@@ -212,7 +211,10 @@ class GrizzlySeries(pd.Series):
         """
         if not isinstance(data, np.ndarray) or data.ndim != 1:
             return None
-        elem_type = wenp.dtype_to_weld_type(data.dtype)
+        if data.dtype.char == 'S':
+            elem_type = WeldVec(I8())
+        else:
+            elem_type = wenp.dtype_to_weld_type(data.dtype)
         return WeldVec(elem_type) if elem_type is not None else None
 
     # ---------------------- Initialization ------------------------------
@@ -232,13 +234,13 @@ class GrizzlySeries(pd.Series):
         2    3
         dtype: int64
         >>> x.__class__
-        <class 'weld.grizzly.series.GrizzlySeries'>
+        <class 'weld.grizzly.core.series.GrizzlySeries'>
         >>> x = GrizzlySeries(np.ones(5))
         >>> x.__class__
-        <class 'weld.grizzly.series.GrizzlySeries'>
-        >>> y = GrizzlySeries(['hi', 'bye']) # Unsupported
+        <class 'weld.grizzly.core.series.GrizzlySeries'>
+        >>> y = GrizzlySeries(['hi', 'bye'])
         >>> y.__class__
-        <class 'pandas.core.series.Series'>
+        <class 'weld.grizzly.core.series.GrizzlySeries'>
         >>> y = GrizzlySeries([1, 2, 3], index=[1, 0, 2]) # Unsupported
         >>> y.__class__
         <class 'pandas.core.series.Series'>
@@ -246,20 +248,30 @@ class GrizzlySeries(pd.Series):
         s = None
         if isinstance(data, WeldLazy):
             self = super(GrizzlySeries, cls).__new__(cls)
-            super(GrizzlySeries, self).__init__(None, dtype=dtype, **kwargs)
+            super(GrizzlySeries, self).__init__(np.array([], dtype=dtype), **kwargs)
             self.weld_value_ = data
             return self
-        elif index is not None and not isinstance(index, pd.RangeIndex):
+
+        if index is not None and not isinstance(index, pd.RangeIndex):
             # TODO(shoumik): This is probably incomplete, since we could have a
             # RangeIndex that does not capture the full span of the data, has a
             # non-zero step, etc.
             return pd.Series(data, dtype=dtype, index=index, **kwargs)
-        elif len(kwargs) != 0:
+
+        if len(kwargs) != 0:
+            # Unsupported arguments present: bail for now.
             return pd.Series(data, dtype=dtype, index=index, **kwargs)
+
+        if isinstance(data, list) and len(data) > 0 and isinstance(data[0], str):
+            # Try to convert a list of strings into a supported Numpy array.
+            data = np.array(data, dtype='S')
+
+        if isinstance(data, pd.Series):
+            data = data.values
         elif not isinstance(data, np.ndarray):
             # First, convert the input into a Series backed by an ndarray.
-            s = pd.Series(data, dtype=dtype, index=index, **kwargs)
-            data = s.values
+             s = pd.Series(data, dtype=dtype, index=index, **kwargs)
+             data = s.values
 
         # Try to create a Weld type for the input.
         weld_type = GrizzlySeries._supports_grizzly(data)
@@ -270,8 +282,16 @@ class GrizzlySeries(pd.Series):
                     PhysicalValue(data, weld_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
             return self
+
         # Don't re-convert values if we did it once already -- it's expensive.
         return s if s is not None else pd.Series(data, dtype=dtype, index=index, **kwargs)
+
+    # ---------------------- StringMethods ------------------------------
+
+    @property
+    def str(self):
+        # TODO(shoumik.palkar): Use pandas.core.accessor.CachedAccessor?
+        return StringMethods(self)
 
     # ---------------------- Indexing ------------------------------
 

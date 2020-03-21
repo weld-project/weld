@@ -268,7 +268,7 @@ class StringConversionFuncs(object):
     """
 
     stringfuncs = ctypes.PyDLL(weld.encoders._strings.__file__)
-    string_cclass = WeldVec(I8()).ctype_class
+    string_cclass = WeldVec(WeldVec(I8())).ctype_class
 
     @staticmethod
     def numpy_string_array_to_weld(arr):

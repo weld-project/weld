@@ -6,7 +6,7 @@ Test basic Series functionality.
 import numpy as np
 import pandas as pd
 import pytest
-import weld.grizzly.series as gr
+import weld.grizzly as gr
 
 types_ = ['int8', 'uint8', 'int16', 'uint16', 'int32',\
         'uint32', 'int64', 'uint64', 'float32', 'float64']
@@ -134,7 +134,7 @@ def test_indexing():
 
 def test_unsupported_binop_error():
     # Test unsupported
-    from weld.grizzly.error import GrizzlyError
+    from weld.grizzly.core.error import GrizzlyError
     with pytest.raises(GrizzlyError):
         a = gr.GrizzlySeries([1,2,3])
         b = pd.Series([1,2,3])

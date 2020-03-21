@@ -81,7 +81,7 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
     >>> from weld.types import *
     >>> func = compile("|x: i32| x + 1",
     ...        [I32()],  [None],
-    ...        I32(), None) 
+    ...        I32(), None)
     ...
     >>> func(100)[0]
     101
@@ -92,7 +92,7 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
 
     >>> func = compile("|x: i32, y: i32| x + y",
     ...        [I32(), I32()],  [None, None],
-    ...        I32(), None) 
+    ...        I32(), None)
     ...
     >>> func(5, 6)[0]
     11
@@ -101,7 +101,7 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
 
     >>> func = compile("|x: i32| x + 1",
     ...        [I32()],  [PrimitiveWeldEncoder()],
-    ...        I32(), PrimitiveWeldDecoder()) 
+    ...        I32(), PrimitiveWeldDecoder())
     ...
     >>> func(100)[0]
     101
@@ -157,6 +157,7 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
 
         raw_args_pointer = ctypes.addressof(raw_args)
         value = WeldValue(raw_args_pointer)
+
 
         if context is None:
             context = WeldContext(conf)
