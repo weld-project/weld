@@ -178,6 +178,93 @@ class StringMethods(object):
             raise TypeError("pattern in contains must be a Python 'str'")
         return self._apply(weldstr.contains, pat, return_weld_elem_type=Bool())
 
+    def startswith(self, pat):
+        """
+        Returns whether each string starts with the provided pattern.
+
+        Pattern must be a Python string.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x.str.startswith('wo').evaluate()
+        0    False
+        1     True
+        dtype: bool
+
+        """
+        if not isinstance(pat, str):
+            raise TypeError("pattern in startswith must be a Python 'str'")
+        return self._apply(weldstr.startswith, pat, return_weld_elem_type=Bool())
+
+    def endswith(self, pat):
+        """
+        Returns whether each string starts with the provided pattern.
+
+        Pattern must be a Python string.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x.str.endswith('rld').evaluate()
+        0    False
+        1     True
+        dtype: bool
+
+        """
+        if not isinstance(pat, str):
+            raise TypeError("pattern in endswith must be a Python 'str'")
+        return self._apply(weldstr.endswith, pat, return_weld_elem_type=Bool())
+
+    def find(self, sub, start=0, end=None):
+        """
+        Find 'sub' in each string. Each string is searched in the range [start,end].
+
+        'sub' must be a Python string, and 'start' and 'end' must be Python integers.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["bigfatcat", "fatcatbig", "reallybigcat"])
+        >>> x.str.find('fat').evaluate()
+        0    3
+        1    0
+        2   -1
+        dtype: int64
+        >>> x.str.find('big', end=2).evaluate()
+        0    0
+        1   -1
+        2   -1
+        dtype: int64
+
+        """
+        if not isinstance(sub, str):
+            raise TypeError("sub in find must be a Python 'str'")
+        if not isinstance(start, int):
+            raise TypeError("start in find must be a Python 'int'")
+        if end is not None and not isinstance(end, int):
+            raise TypeError("end in find must be a Python 'int'")
+        return self._apply(weldstr.find, sub, start, end, return_weld_elem_type=I64())
+
+    def replace(self, pat, rep):
+        """
+        Replaces the first occurrence of 'pat' with 'rep' in each string.
+
+        Pattern and replacement must be Python strings.
+
+        Examples
+        --------
+        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x.str.replace('o', 'lalala').str.to_pandas()
+        0    helllalala
+        1    wlalalarld
+        dtype: object
+
+        """
+        if not isinstance(pat, str):
+            raise TypeError("pattern in replace must be a Python 'str'")
+        if not isinstance(rep, str):
+            raise TypeError("replacement in replace must be a Python 'str'")
+        return self._apply(weldstr.replace, pat, rep)
 
 class GrizzlySeries(pd.Series):
     """
