@@ -35,8 +35,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["Welcome", "to", "Grizzly!"])
+        >>> x = gr.GrizzlySeries(["Welcome", "to", "Grizzly!"])
         >>> x
         0     b'Welcome'
         1          b'to'
@@ -70,8 +69,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["HELLO", "WorLD"])
+        >>> x = gr.GrizzlySeries(["HELLO", "WorLD"])
         >>> x.str.lower().str.to_pandas()
         0    hello
         1    world
@@ -86,8 +84,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "WorlD"])
+        >>> x = gr.GrizzlySeries(["hello", "WorlD"])
         >>> x.str.upper().str.to_pandas()
         0    HELLO
         1    WORLD
@@ -102,8 +99,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "worlD"])
+        >>> x = gr.GrizzlySeries(["hello", "worlD"])
         >>> x.str.capitalize().str.to_pandas()
         0    Hello
         1    World
@@ -120,8 +116,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "worlD"])
+        >>> x = gr.GrizzlySeries(["hello", "worlD"])
         >>> x.str.get(4).str.to_pandas()
         0    o
         1    D
@@ -140,8 +135,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["     hello   ", "   world    \t  "])
+        >>> x = gr.GrizzlySeries(["     hello   ", "   world    \t  "])
         >>> x.str.strip().str.to_pandas()
         0    hello
         1    world
@@ -158,8 +152,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x = gr.GrizzlySeries(["hello", "world"])
         >>> x.str.contains('wor').evaluate()
         0    False
         1     True
@@ -178,8 +171,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x = gr.GrizzlySeries(["hello", "world"])
         >>> x.str.startswith('wo').evaluate()
         0    False
         1     True
@@ -198,8 +190,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x = gr.GrizzlySeries(["hello", "world"])
         >>> x.str.endswith('rld').evaluate()
         0    False
         1     True
@@ -218,8 +209,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["bigfatcat", "fatcatbig", "reallybigcat"])
+        >>> x = gr.GrizzlySeries(["bigfatcat", "fatcatbig", "reallybigcat"])
         >>> x.str.find('fat').evaluate()
         0    3
         1    0
@@ -248,8 +238,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> from weld.grizzly import GrizzlySeries
-        >>> x = GrizzlySeries(["hello", "world"])
+        >>> x = gr.GrizzlySeries(["hello", "world"])
         >>> x.str.replace('o', 'lalala').str.to_pandas()
         0    helllalala
         1    wlalalarld
