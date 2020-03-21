@@ -28,9 +28,6 @@ def compare_vs_pandas(func, strings, *args, **kwargs):
         grizzly_result = grizzly_result.str.to_pandas()
     assert pandas_result.equals(grizzly_result)
 
-def test_to_pandas():
-    pass
-
 # Strings to test capitalization functions.
 capitals_strings = [
         "hello",  "HELLO", "LonGHelLO", "",
