@@ -212,7 +212,7 @@ class StringMethods(object):
 
     def find(self, sub, start=0, end=None):
         """
-        Find 'sub' in each string. Each string is searched in the range [start,end].
+        Find 'sub' in each string. Each string is searched in the range [start,end).
 
         'sub' must be a Python string, and 'start' and 'end' must be Python integers.
 
@@ -226,7 +226,7 @@ class StringMethods(object):
         2   -1
         dtype: int64
         >>> x.str.find('big', end=2).evaluate()
-        0    0
+        0   -1
         1   -1
         2   -1
         dtype: int64

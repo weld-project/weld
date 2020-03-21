@@ -258,8 +258,7 @@ def find(stringarr, sub, start, end=None):
 
     start = "i64({})".format(start)
     if end is None:
-        # -1L since we add 1L below to make the range inclusive in the size.
-        end = 'len(e) - 1L'
+        end = 'len(e)'
     else:
         end = "i64({})".format(end)
 
@@ -271,8 +270,8 @@ def find(stringarr, sub, start, end=None):
     map({stringarr},
         |e: vec[i8]|
             let start = {start};
-            let size = {end} - start + 1L; # Search [start:end], so add 1L.
-            if (start < 0L || start + size > len(e),
+            let size = {end} - start;
+            if (start < 0L,
                 -1L,
                 let string = slice(e, start, size);
                 let lenString = len(string);
