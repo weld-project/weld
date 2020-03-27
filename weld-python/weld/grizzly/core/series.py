@@ -8,7 +8,7 @@ import pandas as pd
 import warnings
 
 import weld.encoders.numpy as wenp
-import weld.grizzly.weld.str as weldstr
+import weld.grizzly.weld.agg as weldagg
 
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.grizzly.weld.ops import *
@@ -292,6 +292,21 @@ class GrizzlySeries(pd.Series):
     def str(self):
         # TODO(shoumik.palkar): Use pandas.core.accessor.CachedAccessor?
         return StringMethods(self)
+
+    # ---------------------- Aggregation ------------------------------
+
+    def agg(self, func):
+        """
+        Apply the provided aggregation functions.
+
+        If a single function is provided, this returns a scalar. If multiple
+        functions are provided, this returns a `GrizzlySeries`, where the Nth
+        element in the series is the result of the Nth aggregation.
+
+        """
+        assert isinstance(func, (str, list))
+        if isinstance(func, list):
+            assert all([weldagg.supported(agg) for agg in func])
 
     # ---------------------- Indexing ------------------------------
 
