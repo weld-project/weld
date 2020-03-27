@@ -71,6 +71,9 @@ def _define_primitive_type(typename, ir, ctype, classdoc=None, add_to_module=Tru
 
     template = """
 class {typename}(WeldType):
+
+    __slots__ = []
+
     def __str__(self):
         return "{ir}"
 

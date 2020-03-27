@@ -24,6 +24,17 @@ def supported(name):
     """
     return name in _agg_supported
 
+def result_elem_type(input_ty, aggs):
+    """
+    Return the resulting element type of a list of aggregations.
+
+    This will either be 'I64' or 'F64'.
+    """
+    aggs.sort(key=lambda x: _agg_priorities[x])
+    for agg in aggs:
+        input_ty = _agg_output_types[agg](input_ty)
+    return input_ty
+
 @weld.lazy.weldfunc
 def agg(array, weld_elem_type, aggs):
     """
@@ -209,16 +220,6 @@ def std(array, _elem_type, deps):
     return "sqrt({var})".format(var=deps['var'])
 
 
-def result_elem_type(input_ty, aggs):
-    """
-    Return the resulting element type of a list of aggregations.
-
-    This will either be 'i64' or 'f64'.
-    """
-    aggs.sort(key=lambda x: _agg_priorities[x])
-    for agg in aggs:
-        input_ty = _agg_output_types[agg](input_ty)
-    return input_ty
 
 
 _agg_supported = {
