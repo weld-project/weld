@@ -446,7 +446,6 @@ fn inline_lets() {
     let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");
     inline_let(&mut e1);
     let e2 = typed_expression("1 + 2 + 3");
-    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     let mut e1 = typed_expression(
@@ -460,7 +459,6 @@ fn inline_lets() {
         "|input: vec[i32]|
         result(for(input, merger[i32,+], |b,i,e| merge(b, e + 1))) + 1",
     );
-    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     let mut e1 = typed_expression(
@@ -474,6 +472,5 @@ fn inline_lets() {
         "|input: vec[i32]|
         result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a + a))) + 1",
     );
-    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }

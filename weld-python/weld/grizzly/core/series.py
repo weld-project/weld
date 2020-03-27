@@ -76,8 +76,17 @@ class GrizzlySeries(pd.Series):
     def output_type(self):
         """
         Returns the Weld output type of this `GrizzlySeries`.
+
+        The output type is always a `WeldVec` of some type.
         """
         return self.weld_value_.output_type
+
+    @property
+    def elem_type(self):
+        """
+        Returns the element type of this `GrizzlySeries`.
+        """
+        return self.weld_value_.output_type.elem_type
 
     @property
     def is_value(self):
@@ -295,7 +304,7 @@ class GrizzlySeries(pd.Series):
 
     # ---------------------- Aggregation ------------------------------
 
-    def agg(self, func):
+    def agg(self, funcs):
         """
         Apply the provided aggregation functions.
 
@@ -304,9 +313,51 @@ class GrizzlySeries(pd.Series):
         element in the series is the result of the Nth aggregation.
 
         """
-        assert isinstance(func, (str, list))
-        if isinstance(func, list):
-            assert all([weldagg.supported(agg) for agg in func])
+        if isinstance(funcs, str):
+            funcs = [funcs]
+        if isinstance(funcs, list):
+            assert all([weldagg.supported(agg) for agg in funcs])
+
+        output_elem_type = weldagg.result_elem_type(self.elem_type, funcs)
+        if len(funcs) > 1:
+            output_type = WeldVec(output_elem_type)
+            decoder = GrizzlySeries._decoder
+        else:
+            output_type = output_elem_type
+            # Result is a primitive, so we can use the default primitive decoder.
+            decoder = None
+
+        result_weld_value = weldagg.agg(self.weld_value_, self.elem_type, funcs)(output_type, decoder)
+        if decoder is not None:
+            return GrizzlySeries(result_weld_value, dtype=wenp.weld_type_to_dtype(output_elem_type))
+        else:
+            # TODO(shoumik.palkar): Do we want to evaluate here? For now, we will, but eventually it may
+            # be advantageous to have a lazy scalar value that can be used elsewhere.
+            return result_weld_value.evaluate()[0]
+
+    def count(self):
+        return self.agg('count')
+
+    def sum(self):
+        return self.agg('sum')
+
+    def prod(self):
+        return self.agg('prod')
+
+    def min(self):
+        return self.agg('min')
+
+    def max(self):
+        return self.agg('max')
+
+    def mean(self):
+        return self.agg('mean')
+
+    def var(self):
+        return self.agg('var')
+
+    def std(self):
+        return self.agg('std')
 
     # ---------------------- Indexing ------------------------------
 

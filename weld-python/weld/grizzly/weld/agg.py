@@ -5,9 +5,10 @@ Supports co-generation of aggregation functions to enable better optimization.
 
 """
 
-from weld.types import I64, F32, F64
-
+import copy
 import weld.lazy
+
+from weld.types import I64, F32, F64
 
 def supported(name):
     """
@@ -30,7 +31,7 @@ def result_elem_type(input_ty, aggs):
 
     This will either be 'I64' or 'F64'.
     """
-    aggs.sort(key=lambda x: _agg_priorities[x])
+    aggs = sorted(aggs, key=lambda x: _agg_priorities[x])
     for agg in aggs:
         input_ty = _agg_output_types[agg](input_ty)
     return input_ty
@@ -49,12 +50,20 @@ def agg(array, weld_elem_type, aggs):
     type can be retrieved with 'result_elem_type()'.
 
     """
+    aggs_to_run = set(aggs)
+    for agg in aggs:
+        # Add all the dependencies.
+        aggs_to_run = aggs_to_run.union(dependencies_recursive(agg))
+
     # Compute aggregations in order of priorty, and remove duplicates.
-    sorted_aggs = sorted(list(set(aggs)), key=lambda x: _agg_priorities[x])
+    sorted_aggs = sorted(list(aggs_to_run), key=lambda x: _agg_priorities[x])
+    # Names referring to already-computed aggs, keyed by agg name.
     deps = dict()
-    # List of computations.
-    computations = []
+    # Computations, keyed by agg name
+    computations = dict()
     previous_output_type = weld_elem_type
+    # Final result program.
+    result = ""
 
     for agg in sorted_aggs:
         # Use the element type produced by the aggregation.
@@ -63,28 +72,44 @@ def agg(array, weld_elem_type, aggs):
         code = _agg_funcs[agg](array, str(elem_type), deps)
         name = "{}_result".format(agg)
         deps[agg] = name
-        computations[agg] = (name, code)
+        computations[agg] = code
         previous_output_type = elem_type
-
-    # Construct the final result.
-    final_code = ""
-    for (_, (name, code)) in computations.items():
+        # Append the just-computed agg to the final code.
         result += "let {name} = {code};\n".format(name=name, code=code)
 
-    if len(computations) == 1:
-        # Just return the scalar if there is only one aggregation.
-        for key in computations:
-            result += computations[key][0]
-            return result
+    if len(aggs) == 1:
+        # Just return the scalar if there is only one aggregation requested.
+        # Note that we may have computed more than one if there were dependencies.
+        result += deps[aggs[0]]
+        return result
     else:
         # If there are multiple aggregations, construct a vector to hold them. The vector
-        # needs to be ordered in the same way that the aggregations were requested in.
+        # needs to be ordered in the same way that the aggregations were requested in, and they
+        # need to be cast to the same type.
         output_type = result_elem_type(weld_elem_type, aggs)
         ordered_results = []
+        # Iterate in the original order. This could have duplicates, which is okay.
         for agg in aggs:
-            ordered_results.append("{ty}({name})".format(ty=output_type, name=computations[agg][0]))
+            ordered_results.append("{ty}({name})".format(ty=output_type, name=deps[agg]))
         result += "[" + ", ".join(ordered_results) + "]"
         return result
+
+def dependencies_recursive(agg):
+    """
+    Recursively get all dependencies of 'agg'.
+
+    Tests
+    -----
+
+    >>> sorted(list(dependencies_recursive('var')))
+    ['count', 'mean', 'sum']
+
+    """
+    deps = set(_agg_dependencies[agg])
+    for dep_agg in _agg_dependencies[agg]:
+        deps = deps.union(dependencies_recursive(dep_agg))
+    return deps
+
 
 def agg_template(array, agg_func, elem_type):
     """

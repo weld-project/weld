@@ -158,7 +158,6 @@ def compile(program, arg_types, encoders, restype, decoder, conf=None):
         raw_args_pointer = ctypes.addressof(raw_args)
         value = WeldValue(raw_args_pointer)
 
-
         if context is None:
             context = WeldContext(conf)
 
