@@ -94,13 +94,10 @@ def test_basic_fallback():
         # Test 1: abs()
         c = a + b
         yield (c.abs() + a)
-        # Test 2: agg()
-        c = a + b
-        yield cls(c.agg(np.sum)) # wrap with cls for type checking
-        # Test 3: argmin()
+        # Test 2: argmin()
         c = a + b
         yield cls(c.argmin())
-        # Test 4: reindex()
+        # Test 3: reindex()
         c = a + b
         res = c.reindex(index=[2, 0, 1])
         # Falls back to Pandas, since we don't support indices.

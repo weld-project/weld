@@ -25,13 +25,6 @@ pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
     let expect = &typed_expression(expect);
 
     transform(input);
-
-    println!(
-        "\nInput: {}\nExpect: {}",
-        input.pretty_print_config(&conf),
-        expect.pretty_print_config(&conf)
-    );
-
     assert!(input.compare_ignoring_symbols(expect).unwrap());
 }
 

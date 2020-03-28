@@ -34,7 +34,6 @@ trait LoopSizeAnnotation {
 
 impl LoopSizeAnnotation for Expr {
     fn loopsize(&self) -> Option<u64> {
-        println!("{}", self.annotations);
         self.annotations
             .get("loopsize")
             .and_then(|value| value.parse::<u64>().ok())

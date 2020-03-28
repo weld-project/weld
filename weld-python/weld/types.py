@@ -71,6 +71,9 @@ def _define_primitive_type(typename, ir, ctype, classdoc=None, add_to_module=Tru
 
     template = """
 class {typename}(WeldType):
+
+    __slots__ = []
+
     def __str__(self):
         return "{ir}"
 
@@ -130,12 +133,12 @@ class WeldVec(WeldType):
     Examples
     --------
     >>> v1 = WeldVec(I32())
-    >>> print(v1)
-    vec[i32]
+    >>> str(v1)
+    'vec[i32]'
 
     >>> v2 = WeldVec(F32())
-    >>> print(v2)
-    vec[f32]
+    >>> str(v2)
+    'vec[f32]'
 
     >>> v3 = WeldVec(I32())
     >>> assert v1.__class__ is v2.__class__
@@ -190,16 +193,16 @@ class WeldStruct(WeldType):
     Examples
     --------
     >>> v1 = WeldStruct((I32(),))
-    >>> print(v1)
-    {i32}
+    >>> str(v1)
+    '{i32}'
 
     >>> v2 = WeldStruct((WeldVec(I32()), I64()))
-    >>> print(v2)
-    {vec[i32],i64}
+    >>> str(v2)
+    '{vec[i32],i64}'
 
     >>> v3 = WeldStruct((v1, v2))
-    >>> print(v3)
-    {{i32},{vec[i32],i64}}
+    >>> str(v3)
+    '{{i32},{vec[i32],i64}}'
 
     """
     _singletons = {}

@@ -8,7 +8,7 @@ import pandas as pd
 import warnings
 
 import weld.encoders.numpy as wenp
-import weld.grizzly.weld.str as weldstr
+import weld.grizzly.weld.agg as weldagg
 
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.grizzly.weld.ops import *
@@ -76,8 +76,17 @@ class GrizzlySeries(pd.Series):
     def output_type(self):
         """
         Returns the Weld output type of this `GrizzlySeries`.
+
+        The output type is always a `WeldVec` of some type.
         """
         return self.weld_value_.output_type
+
+    @property
+    def elem_type(self):
+        """
+        Returns the element type of this `GrizzlySeries`.
+        """
+        return self.weld_value_.output_type.elem_type
 
     @property
     def is_value(self):
@@ -292,6 +301,153 @@ class GrizzlySeries(pd.Series):
     def str(self):
         # TODO(shoumik.palkar): Use pandas.core.accessor.CachedAccessor?
         return StringMethods(self)
+
+    # ---------------------- Aggregation ------------------------------
+
+    def agg(self, funcs):
+        """
+        Apply the provided aggregation functions.
+
+        If a single function is provided, this returns a scalar. If multiple
+        functions are provided, this returns a `GrizzlySeries`, where the Nth
+        element in the series is the result of the Nth aggregation.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.agg('sum')
+        10
+        >>> s.agg(['sum', 'mean']).evaluate()
+        0    10.0
+        1     2.5
+        dtype: float64
+
+        """
+        if isinstance(funcs, str):
+            funcs = [funcs]
+        if isinstance(funcs, list):
+            assert all([weldagg.supported(agg) for agg in funcs])
+
+        output_elem_type = weldagg.result_elem_type(self.elem_type, funcs)
+        if len(funcs) > 1:
+            output_type = WeldVec(output_elem_type)
+            decoder = GrizzlySeries._decoder
+        else:
+            output_type = output_elem_type
+            # Result is a primitive, so we can use the default primitive decoder.
+            decoder = None
+
+        result_weld_value = weldagg.agg(self.weld_value_, self.elem_type, funcs)(output_type, decoder)
+        if decoder is not None:
+            return GrizzlySeries(result_weld_value, dtype=wenp.weld_type_to_dtype(output_elem_type))
+        else:
+            # TODO(shoumik.palkar): Do we want to evaluate here? For now, we will, but eventually it may
+            # be advantageous to have a lazy scalar value that can be used elsewhere.
+            return result_weld_value.evaluate()[0]
+
+    def count(self):
+        """
+        Computes the count.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.count()
+        4
+
+        """
+        return self.agg('count')
+
+    def sum(self):
+        """
+        Computes the sum.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.sum()
+        10
+
+        """
+        return self.agg('sum')
+
+    def prod(self):
+        """
+        Computes the product.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.prod()
+        24
+
+        """
+        return self.agg('prod')
+
+    def min(self):
+        """
+        Finds the min element.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.min()
+        1
+
+        """
+        return self.agg('min')
+
+    def max(self):
+        """
+        Returns the max element.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.max()
+        4
+
+        """
+        return self.agg('max')
+
+    def mean(self):
+        """
+        Computes the mean.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.mean()
+        2.5
+
+        """
+        return self.agg('mean')
+
+    def var(self):
+        """
+        Computes the variance.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.var()
+        1.6666666666666667
+
+        """
+        return self.agg('var')
+
+    def std(self):
+        """
+        Computes the standard deviation.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.std()
+        1.2909944487358056
+
+        """
+        return self.agg('std')
 
     # ---------------------- Indexing ------------------------------
 
