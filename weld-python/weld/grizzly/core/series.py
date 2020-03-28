@@ -312,6 +312,16 @@ class GrizzlySeries(pd.Series):
         functions are provided, this returns a `GrizzlySeries`, where the Nth
         element in the series is the result of the Nth aggregation.
 
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.agg('sum')
+        10
+        >>> s.agg(['sum', 'mean']).evaluate()
+        0    10.0
+        1     2.5
+        dtype: float64
+
         """
         if isinstance(funcs, str):
             funcs = [funcs]
@@ -336,27 +346,107 @@ class GrizzlySeries(pd.Series):
             return result_weld_value.evaluate()[0]
 
     def count(self):
+        """
+        Computes the count.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.count()
+        4
+
+        """
         return self.agg('count')
 
     def sum(self):
+        """
+        Computes the sum.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.sum()
+        10
+
+        """
         return self.agg('sum')
 
     def prod(self):
+        """
+        Computes the product.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.prod()
+        24
+
+        """
         return self.agg('prod')
 
     def min(self):
+        """
+        Finds the min element.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.min()
+        1
+
+        """
         return self.agg('min')
 
     def max(self):
+        """
+        Returns the max element.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.max()
+        4
+
+        """
         return self.agg('max')
 
     def mean(self):
+        """
+        Computes the mean.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.mean()
+        2.5
+
+        """
         return self.agg('mean')
 
     def var(self):
+        """
+        Computes the variance.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.var()
+        1.6666666666666667
+
+        """
         return self.agg('var')
 
     def std(self):
+        """
+        Computes the standard deviation.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([1,2,3,4])
+        >>> s.std()
+        1.2909944487358056
+
+        """
         return self.agg('std')
 
     # ---------------------- Indexing ------------------------------

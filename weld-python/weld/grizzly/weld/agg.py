@@ -276,8 +276,8 @@ _agg_dependencies = {
     'sum': set(),
     'prod': set(),
     'mean': {'sum', 'count'},
-    'var': {'sum', 'mean'},
-    'std': {'sum', 'mean', 'var'}
+    'var': {'count', 'mean'},
+    'std': {'var'}
 }
 
 # to order the aggregations; lower means it comes first
