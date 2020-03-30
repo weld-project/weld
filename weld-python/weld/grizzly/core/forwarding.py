@@ -6,6 +6,7 @@ The `Forwarding` class can be used as a mixin.
 """
 
 import inspect
+import warnings
 
 class Forwarding(object):
     @classmethod

@@ -5,6 +5,7 @@ Cargo.lock
 .#*
 *~
 *.swp
+*.swo
 *.bc
 *.pyc
 *.o

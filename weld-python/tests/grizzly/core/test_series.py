@@ -129,6 +129,19 @@ def test_indexing():
     assert np.array_equal(x[x == 2].evaluate().values, np.array([2], dtype='int64'))
     assert np.array_equal(x[x < 0].evaluate().values, np.array([], dtype='int64'))
 
+def test_name():
+    # Test that names propagate after operations.
+    x = gr.GrizzlySeries([1,2,3], name="testname")
+    y = x + x
+    assert y.evaluate().name == "testname"
+    y = x.agg(['sum', 'count'])
+    assert y.evaluate().name == "testname"
+    y = x[:2]
+    assert y.evaluate().name == "testname"
+    y = x[x == 1]
+    assert y.evaluate().name == "testname"
+
+
 def test_unsupported_binop_error():
     # Test unsupported
     from weld.grizzly.core.error import GrizzlyError
