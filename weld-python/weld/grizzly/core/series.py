@@ -1,8 +1,8 @@
 """
 A Weld wrapper for pandas.Series.
+
 """
 
-import inspect
 import numpy as np
 import pandas as pd
 import warnings
@@ -13,6 +13,7 @@ import weld.grizzly.weld.agg as weldagg
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.grizzly.weld.ops import *
 from weld.grizzly.core.error import GrizzlyError
+from weld.grizzly.core.forwarding import Forwarding
 from weld.grizzly.core.strings import StringMethods
 from weld.types import *
 
@@ -26,7 +27,7 @@ def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
     except TypeError:
         return pd.Series(data=data, **kwargs)
 
-class GrizzlySeries(pd.Series):
+class GrizzlySeries(Forwarding, pd.Series):
     """
     A lazy `Series` object backed by a Weld computation.
 
@@ -751,61 +752,5 @@ class GrizzlySeries(pd.Series):
     def __repr__(self):
         return str(self)
 
-    # ---------------------- Method forwarding setup ------------------------------
-
-    @classmethod
-    def _get_class_that_defined_method(cls, meth):
-        """
-        Returns the class that defines the requested method. For methods that are
-        defined outside of a particular set of Grizzly-defined classes, Grizzly will
-        first evaluate lazy results before forwarding the data to `pandas.Series`.
-        """
-        if inspect.ismethod(meth):
-            for cls in inspect.getmro(meth.__self__.__class__):
-                if cls.__dict__.get(meth.__name__) is meth:
-                    return cls
-        if inspect.isfunction(meth):
-            return getattr(inspect.getmodule(meth),
-                           meth.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
-
-    @classmethod
-    def _requires_forwarding(cls, meth):
-        defined_in = cls._get_class_that_defined_method(meth)
-        if defined_in is not None and defined_in is not cls:
-            return True
-        else:
-            return False
-
-    @classmethod
-    def forward(cls):
-        from functools import wraps
-        def forward_decorator(func):
-            @wraps(func)
-            def forwarding_wrapper(self, *args, **kwargs):
-                self.evaluate()
-                result = func(self, *args, **kwargs)
-                # Unsupported functions will return Series -- try to
-                # switch back to GrizzlySeries.
-                if not isinstance(result, GrizzlySeries) and isinstance(result, pd.Series):
-                    try_convert = GrizzlySeries(data=result.values, index=result.index)
-                    if not isinstance(try_convert, GrizzlySeries):
-                        warnings.warn("Unsupported operation '{}' produced unsupported Series: falling back to Pandas".format(
-                            func.__name__))
-                    return try_convert
-                return result
-            return forwarding_wrapper
-        return forward_decorator
-
-    @classmethod
-    def _add_forwarding_methods(cls):
-        methods = dir(cls)
-        for meth in methods:
-            if meth.startswith("_"):
-                # We only want to do this for API methods.
-                continue
-            attr = getattr(cls, meth)
-            if cls._requires_forwarding(attr):
-                setattr(cls, meth, cls.forward()(attr))
-
 # Wrap public API methods for forwarding
-GrizzlySeries._add_forwarding_methods()
+GrizzlySeries.add_forwarding_methods(pd.Series)
