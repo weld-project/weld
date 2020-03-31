@@ -37,6 +37,27 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
     regular pandas behavior. Similarly, `GrizzlySeries` that are initialized with
     features that Grizzly does not understand are initialized as `pd.Series`.
 
+    Implementation Notes
+    --------------------
+
+    A Series in Grizzly is a 1D array of a single data type. Transformations on
+    Series can result in scalar values, which are directly evaluated and
+    returned as scalars, as other Series that encapsulate lazy Weld
+    computations, or as DataFrames (currently unsupported).
+
+    A Series always has a known type: unlike pandas Series, which are wrappers
+    around Python object, Series with heterogeneous types (i.e., Series with
+    `dtype=object`) are disallowed. Series that are not evaluated/store a lazy
+    compuations also always have a known type.
+
+    Internally, most Series are backed by NumPy arrays, which themselves are
+    stored as contiguous C arrays. The main exception is string data. Grizzly
+    operates exclusively over UTF-8 encoded data, and most string operations
+    will create a copy of the input data upon evaluation. Strings are currently
+    encoded as NumPy arrays with the 'S' dtype: this may change in the future
+    (the 'S' dtype forces memory usage per string to match the length of the
+    largest string in the array, which is clearly suboptimal).
+
     Parameters
     ----------
 
@@ -44,6 +65,8 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
         Contains data stored in the series.
     dtype : numpy.dtype or str
         Data type of the values.
+    name : str
+        A name to give the series.
 
     Examples
     --------
