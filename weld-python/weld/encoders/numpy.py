@@ -17,7 +17,7 @@ directly since they only involve a pointer copy.
 import ctypes
 import numpy as np
 
-from .encoder_base import *
+from weld.encoders.struct import StructWeldEncoder, StructWeldDecoder
 from weld.types import *
 
 # We just need this for the path.
@@ -295,7 +295,11 @@ class StringConversionFuncs(object):
         return result
 
 
-class NumPyWeldEncoder(WeldEncoder):
+class NumPyWeldEncoder(StructWeldEncoder):
+    """
+    Encodes NumPy arrays as Weld arrays.
+
+    """
 
     @staticmethod
     def _convert_1d_array(array, check_type=None):
@@ -353,7 +357,7 @@ class NumPyWeldEncoder(WeldEncoder):
             return False
         return True
 
-    def encode(self, obj, ty):
+    def encode_element(self, obj, ty):
         if NumPyWeldEncoder._is_string_array(obj):
             assert ty == WeldVec(WeldVec(I8()))
             return StringConversionFuncs.numpy_string_array_to_weld(obj)
@@ -365,9 +369,12 @@ class NumPyWeldEncoder(WeldEncoder):
         else:
             raise TypeError("Unexpected type {} in NumPy encoder".format(type(obj)))
 
-class NumPyWeldDecoder(WeldDecoder):
-    """ Decodes an encoded Weld array into a NumPy array.
+class NumPyWeldDecoder(StructWeldDecoder):
+    """
+    Decodes an encoded Weld array into a NumPy array.
 
+    Examples
+    --------
     >>> arr = np.array([1,2,3], dtype='int32')
     >>> encoded = NumPyWeldEncoder().encode(arr, WeldVec(I32()))
     >>> NumPyWeldDecoder().decode(ctypes.pointer(encoded), WeldVec(I32()))
@@ -457,7 +464,7 @@ class NumPyWeldDecoder(WeldDecoder):
                     return True
         return False
 
-    def decode(self, obj, restype, context=None):
+    def decode_element(self, obj, restype, context=None):
         # A 1D NumPy array
         obj = obj.contents
         if NumPyWeldDecoder._is_string_array(restype):

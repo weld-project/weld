@@ -99,6 +99,11 @@ def test_float32_vec():
 def test_float64_vec():
     encdec(array('float64'), WeldVec(F64()))
 
+def test_struct_of_vecs():
+    arrays = (array('float32'), array('uint16'), array('uint32'))
+    ty = WeldStruct([WeldVec(F32()), WeldVec(U16()), WeldVec(U32())])
+    encdec(arrays, ty)
+
 def test_type_conversions():
     types = ['bool', 'int8', 'uint8', 'int16', 'uint16',
             'int32', 'uint32', 'int64', 'uint64', 'float32', 'float64']
