@@ -40,6 +40,9 @@ class ColumnIndex(Index):
             columns = list(columns)
         if slots is not None:
             assert len(columns) == len(slots)
+            sorted_slots = sorted(slots)
+            # Make sure each slot is occupied/there are no "holes".
+            assert sorted_slots == list(range(sorted_slots[-1]))
         else:
             slots = range(len(columns))
 
@@ -77,6 +80,34 @@ class ColumnIndex(Index):
             columns = sorted(list(set(self.columns).union(other.columns)))
             for name in columns:
                 yield (name, self.index.get(name), other.index.get(name))
+
+    def __getitem__(self, key):
+        """
+        Get the slot for a paritcular column name.
+
+        Examples
+        --------
+        >>> a = ColumnIndex(["name", "age"])
+        >>> a["age"]
+        1
+
+        """
+        return self.index[key]
+
+    def append(self, key):
+        """
+        Add a new column to the index. The slot is set to be `len(columns) - 1`.
+
+        Examples
+        --------
+        >>> a = ColumnIndex(["name", "age"])
+        >>> a.append("income")
+        >>> a["income"]
+        2
+
+        """
+        self.index[key] = len(self.columns)
+        self.columns.append(key)
 
     def __eq__(self, other):
         """

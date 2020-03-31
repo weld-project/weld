@@ -16,6 +16,14 @@ class GrizzlyBase(ABC):
         """
         pass
 
+    @property
+    @abstractmethod
+    def is_value(self):
+        """
+        Returns whether this collection wraps a physical value rather than
+        a computation.
+        """
+        pass
 
     @abstractmethod
     def evaluate(self):
@@ -29,7 +37,6 @@ class GrizzlyBase(ABC):
 
         """
         pass
-
 
     @abstractmethod
     def to_pandas(self, copy=False):
@@ -48,7 +55,6 @@ class GrizzlyBase(ABC):
         """
         pass
 
-
     @property
     def children(self):
         """
@@ -65,13 +71,6 @@ class GrizzlyBase(ABC):
         """
         return self.weld_value.output_type
 
-    @property
-    def is_value(self):
-        """
-        Returns whether this collection wraps a physical value rather than
-        a computation.
-        """
-        return self.weld_value.is_identity or hasattr(self, "evaluating_")
 
     @property
     def code(self):

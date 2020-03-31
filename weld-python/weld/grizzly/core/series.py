@@ -96,12 +96,19 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
         self.weld_value_ = value
 
     @property
+    def is_value(self):
+        """
+        Returns whether this collection wraps a physical value rather than
+        a computation.
+        """
+        return self.weld_value.is_identity or hasattr(self, "evaluating_")
+
+    @property
     def elem_type(self):
         """
         Returns the element type of this `GrizzlySeries`.
         """
         return self.weld_value.output_type.elem_type
-
 
     @property
     def values(self):
@@ -278,6 +285,8 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
 
         if isinstance(data, pd.Series):
             data = data.values
+            if data.dtype == 'object' and isinstance(data[0], str):
+                data = np.array(data, dtype='S')
         elif not isinstance(data, np.ndarray):
             # First, convert the input into a Series backed by an ndarray.
              s = pd.Series(data, dtype=dtype, index=index, name=name, **kwargs)
@@ -537,7 +546,7 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
 
         """
         # If the key is a scalar
-        scalar_key = GrizzlySeries._scalar_ty(key, I64())
+        scalar_key = GrizzlySeries.scalar_ty(key, I64())
         if isinstance(scalar_key, I64):
             self.evaluate()
             return self.values[key]
@@ -553,7 +562,7 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
                     arg = default
                 else:
                     raise GrizzlyError("slice got 'None' when value where expected")
-            arg_ty = GrizzlySeries._scalar_ty(arg, I64())
+            arg_ty = GrizzlySeries.scalar_ty(arg, I64())
             if not isinstance(arg_ty, I64):
                 raise GrizzlyError("slices in __getitem__() must be integers")
             return int(arg)
@@ -609,7 +618,7 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
     # ---------------------- Operators ------------------------------
 
     @classmethod
-    def _scalar_ty(cls, value, cast_ty):
+    def scalar_ty(cls, value, cast_ty):
         """
         Returns the scalar Weld type of a scalar Python value. If the value is not a scalar,
         returns None. For primitive 'int' values, returns 'cast_ty'.
@@ -640,7 +649,7 @@ class GrizzlySeries(Forwarding, GrizzlyBase, pd.Series):
         Performs the operation on two `Series` elementwise.
         """
         left_ty = self.output_type.elem_type
-        scalar_ty = GrizzlySeries._scalar_ty(other, left_ty)
+        scalar_ty = GrizzlySeries.scalar_ty(other, left_ty)
         if scalar_ty is not None:
             # Inline scalars directly instead of adding them
             # as dependencies.
