@@ -5,7 +5,7 @@ Tests primitive encoders and decoders.
 import ctypes
 
 from .helpers import encdec_factory
-from weld.encoders import PrimitiveWeldEncoder, PrimitiveWeldDecoder
+from weld.encoders.primitives import PrimitiveWeldEncoder, PrimitiveWeldDecoder
 from weld.types import *
 
 encdec = encdec_factory(PrimitiveWeldEncoder, PrimitiveWeldDecoder)

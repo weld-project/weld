@@ -4,10 +4,10 @@ as Python functions.
 
 """
 
-from .core import *
-from .encoders import WeldEncoder, WeldDecoder, PrimitiveWeldEncoder,\
-        PrimitiveWeldDecoder
-from .types import WeldType
+from weld.core import *
+from weld.encoders import WeldEncoder, WeldDecoder
+from weld.encoders.primitives import PrimitiveWeldEncoder, PrimitiveWeldDecoder
+from weld.types import WeldType
 
 import ctypes
 import logging

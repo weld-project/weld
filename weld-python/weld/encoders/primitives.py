@@ -6,15 +6,14 @@ the default encoders and decoders when one is not provided.
 
 """
 
-from .encoder_base import *
-from ..types import *
+from weld.encoders.struct import StructWeldEncoder, StructWeldDecoder
+from weld.types import *
 
-class PrimitiveWeldEncoder(WeldEncoder):
+import ctypes
+
+class PrimitiveWeldEncoder(StructWeldEncoder):
     """
-    A primitive encoder for booleans, integers and floats.
-
-    Eventually, this will also support encoding for tuples (structs) of other
-    primitive types.
+    A primitive encoder for booleans, integers, floats, and tuples thereof.
 
     Examples
     --------
@@ -33,24 +32,13 @@ class PrimitiveWeldEncoder(WeldEncoder):
     >>> s._1
     1
     """
-    def encode(self, obj, target_type):
+    def encode_element(self, obj, target_type):
         encoder = target_type.ctype_class
-        if isinstance(target_type, WeldStruct):
-            struct = encoder()
-            for (i, (field, weld_ty)) in enumerate(zip(\
-                    obj, target_type.field_types)):
-                encoded = self.encode(field, weld_ty)
-                setattr(struct, "_" + str(i), encoded)
-            return struct
-        else:
-            return encoder(obj)
+        return encoder(obj)
 
-class PrimitiveWeldDecoder(WeldDecoder):
+class PrimitiveWeldDecoder(StructWeldDecoder):
     """
-    A primitive encoder for booleans, integers, and floats.
-
-    Eventually, this will also support decoding for structs (tuples) of other
-    primitive types.
+    A primitive encoder for booleans, integers, floats, and tuples thereof.
 
     Examples
     --------
@@ -65,18 +53,9 @@ class PrimitiveWeldDecoder(WeldDecoder):
     >>> decoder.decode(ctypes.pointer(x), struct_type)
     (1, 1.0)
     """
-    def decode(self, obj, restype, context=None):
+
+    def decode_element(self, obj, restype, context=None):
         if isinstance(restype, Bool):
             return bool(obj.contents.value)
-        elif isinstance(restype, WeldStruct):
-            struct = obj.contents
-            ctype_class = restype.ctype_class
-            result = []
-            for (i, (weld_ty, (cfield, cty))) in enumerate(zip(\
-                    restype.field_types, ctype_class._fields_)):
-                ofs = getattr(ctype_class, cfield).offset
-                p = ctypes.pointer(cty.from_buffer(struct, ofs))
-                result.append(self.decode(p, weld_ty))
-            return tuple(result)
         else:
             return obj.contents.value
