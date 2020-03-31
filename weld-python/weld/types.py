@@ -22,6 +22,9 @@ class WeldType(ABC):
         """
         pass
 
+    def __repr__(self):
+        return str(self)
+
     def __eq__(self, other):
         return str(self) == str(other)
 

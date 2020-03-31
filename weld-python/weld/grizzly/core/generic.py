@@ -71,7 +71,6 @@ class GrizzlyBase(ABC):
         """
         return self.weld_value.output_type
 
-
     @property
     def code(self):
         """

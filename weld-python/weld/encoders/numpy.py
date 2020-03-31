@@ -118,15 +118,15 @@ def binop_output_type(left_ty, right_ty, truediv=False):
     Examples
     --------
     >>> binop_output_type(Bool(), Bool())
-    <weld.types.Bool object at ...>
+    bool
     >>> binop_output_type(I8(), U16())
-    <weld.types.I32 object at ...>
+    i32
     >>> binop_output_type(U8(), U16())
-    <weld.types.U16 object at ...>
+    u16
     >>> binop_output_type(F32(), U16())
-    <weld.types.F32 object at ...>
+    f32
     >>> binop_output_type(I8(), U64())
-    <weld.types.F64 object at ...>
+    f64
     """
     if not truediv and left_ty == right_ty:
         return left_ty
@@ -238,13 +238,13 @@ def dtype_to_weld_type(ty):
     Examples
     --------
     >>> dtype_to_weld_type('int32')
-    <weld.types.I32 object at 0x...>
+    i32
     >>> dtype_to_weld_type('float')
-    <weld.types.F64 object at 0x...>
+    f64
     >>> dtype_to_weld_type('i8')
-    <weld.types.I64 object at 0x...>
+    i64
     >>> dtype_to_weld_type(np.int16)
-    <weld.types.I16 object at 0x...>
+    i16
 
     Parameters
     ----------

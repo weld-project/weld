@@ -85,25 +85,6 @@ def test_float_nan():
         yield a + b + c * d - e
     _compare_vs_pandas(eval_expression)
 
-def test_basic_fallback():
-    # Tests basic unsupported functionality.
-    # NOTE: This test will need to change as more features are added...
-    def eval_expression(cls):
-        a = cls([1, 2, 3])
-        b = cls([-4, 5, -6])
-        # Test 1: abs()
-        c = a + b
-        yield (c.abs() + a)
-        # Test 2: argmin()
-        c = a + b
-        yield cls(c.argmin())
-        # Test 3: reindex()
-        c = a + b
-        res = c.reindex(index=[2, 0, 1])
-        # Falls back to Pandas, since we don't support indices.
-        assert isinstance(res, pd.Series)
-    _compare_vs_pandas(eval_expression)
-
 def test_scalar():
     types = ['int8', 'uint8', 'int16', 'uint16', 'int32',\
             'uint32', 'int64', 'uint64', 'float32', 'float64']
