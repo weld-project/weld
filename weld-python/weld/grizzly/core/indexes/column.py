@@ -29,9 +29,14 @@ class ColumnIndex(Index):
 
     Examples
     --------
-    >>> index = ColumnIndex(["name", "age"])
-    >>> index
-    ColumnIndex(['name', 'age'])
+    >>> ColumnIndex(["name", "age"])
+    ColumnIndex(['name', 'age'], [0, 1])
+    >>> ColumnIndex(["name", "age"], slots=[1, 0])
+    ColumnIndex(['name', 'age'], [1, 0])
+    >>> ColumnIndex(["name", "age"], slots=[1, 2])
+    Traceback (most recent call last):
+    ...
+    ValueError: slots must be contiguous starting at 0
 
     """
 
@@ -42,7 +47,8 @@ class ColumnIndex(Index):
             assert len(columns) == len(slots)
             sorted_slots = sorted(slots)
             # Make sure each slot is occupied/there are no "holes".
-            assert sorted_slots == list(range(sorted_slots[-1]))
+            if not sorted_slots == list(range(len(slots))):
+                raise ValueError("slots must be contiguous starting at 0")
         else:
             slots = range(len(columns))
 
@@ -50,6 +56,20 @@ class ColumnIndex(Index):
         self.columns = columns
         # The mapping from columns to slots.
         self.index = dict(zip(columns, slots))
+
+    def __iter__(self):
+        """
+        Iterates over columns in the order in which they appear in a DataFrame.
+
+        Examples
+        --------
+        >>> x = ColumnIndex(["name", "age"], slots=[1, 0])
+        >>> [name for name in x]
+        ['name', 'age']
+
+        """
+        for col in self.columns:
+            yield col
 
     def zip(self, other):
         """
@@ -68,9 +88,9 @@ class ColumnIndex(Index):
         >>> b = ColumnIndex(["name", "age"])
         >>> list(a.zip(b))
         [('name', 0, 0), ('age', 1, 1)]
-        >>> b = ColumnIndex(["age", "income", "name"])
+        >>> b = ColumnIndex(["income", "age", "name"])
         >>> list(a.zip(b))
-        [('age', 1, 0), ('income', None, 1), ('name', 0, 2)]
+        [('age', 1, 1), ('income', None, 0), ('name', 0, 2)]
 
         """
         if self == other:
@@ -127,7 +147,7 @@ class ColumnIndex(Index):
         return isinstance(other, ColumnIndex) and self.columns == other.columns
 
     def __str__(self):
-        return "ColumnIndex({})".format(self.index)
+        return repr(self)
 
     def __repr__(self):
-        return "ColumnIndex({})".format(self.columns)
+        return "ColumnIndex({}, {})".format(self.columns, [self.index[col] for col in self.columns])

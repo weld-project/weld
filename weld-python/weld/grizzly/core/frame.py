@@ -105,6 +105,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         pass
 
     def to_pandas(self, copy=False):
+        self.evaluate()
         pass
 
     def __init__(self, data, columns=None, _length=UNKNOWN_LENGTH, _fastpath=False):
@@ -158,15 +159,45 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         self.data.append(value)
     """
 
+    def add(self, other):
+        """
+        Add this DataFrame with another one, aligning on columns.
+
+        """
+        new_data = []
+        if not isinstance(other, GrizzlyDataFrame):
+            for data in self.data:
+                new_data.append(data + other)
+            return GrizzlyDataFrame(new_data,
+                    columns=copy.deepcopy(self.columns),
+                    _length=self.length,
+                    _fastpath=True)
+
+        new_cols = []
+        for (col, left_slot, right_slot) in self.columns.zip(other.columns):
+            new_cols.append(col)
+            if left_slot is None or right_slot is None:
+                # TODO(shoumik): Handle this case by making a lazy computation.
+                assert self.length != UNKNOWN_LENGTH
+                nans = np.empty(self.length)
+                nans[:] = np.nan
+                new_data.append(GrizzlySeries(nans))
+            else:
+                new_data.append(self.data[left_slot] + other.data[right_slot])
+        return GrizzlyDataFrame(new_data,
+                columns=ColumnIndex(new_cols),
+                _length=self.length,
+                _fastpath=True)
+
     def __str__(self):
         if self.pandas_df is not None:
             return str(self.pandas_df)
         else:
-            return None
+            return repr(self)
 
     def __repr__(self):
         if self.pandas_df is not None:
             return repr(self.pandas_df)
         else:
-            return None
+            return "GrizzlyDataFrame(lazy, {})".format([name for name in self.columns.columns])
 

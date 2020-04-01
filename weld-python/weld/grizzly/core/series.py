@@ -583,33 +583,6 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
 
     # ---------------------- Operators ------------------------------
 
-    @classmethod
-    def scalar_ty(cls, value, cast_ty):
-        """
-        Returns the scalar Weld type of a scalar Python value. If the value is not a scalar,
-        returns None. For primitive 'int' values, returns 'cast_ty'.
-
-        This returns 'None' if the value type is not supported.
-
-        Parameters
-        ----------
-        value : any
-            value whose dtype to obtain.
-
-        Returns
-        -------
-        np.dtype
-
-        """
-        if hasattr(value, 'dtype') and hasattr(value, 'shape') and value.shape == ():
-            return wenp.dtype_to_weld_type(value.dtype)
-        if isinstance(value, int):
-            return cast_ty
-        if isinstance(value, float):
-            return F64()
-        if isinstance(value, bool):
-            return Bool()
-
     def _arithmetic_binop_impl(self, other, op, truediv=False, weld_elem_type=None):
         """
         Performs the operation on two `Series` elementwise.
