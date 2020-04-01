@@ -75,7 +75,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         >>> df = GrizzlyDataFrame({'name': ['sam', 'sally'], 'age': [25, 50]})
         >>> df.is_value
         True
-        >>> df = df.add(df)
+        >>> df = df.eq(df)
         >>> df.is_value
         False
 
@@ -248,7 +248,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
                 nans[:] = np.nan
                 new_data.append(GrizzlySeries(nans))
             else:
-                new_data.append(self.data[left_slot] + other.data[right_slot])
+                new_data.append(series_op(self.data[left_slot], other.data[right_slot]))
         return GrizzlyDataFrame(new_data,
                 columns=ColumnIndex(new_cols),
                 _length=self.length,
@@ -276,19 +276,22 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         return self.truediv(other)
 
     def eq(self, other):
-        return self._compare_binop_impl(other, GrizzlySeries.eq)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.eq)
+
+    def ne(self, other):
+        return self._arithmetic_binop_impl(other, GrizzlySeries.ne)
 
     def ge(self, other):
-        return self._compare_binop_impl(other, GrizzlySeries.ge)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.ge)
 
     def gt(self, other):
-        return self._compare_binop_impl(other, GrizzlySeries.gt)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.gt)
 
     def le(self, other):
-        return self._compare_binop_impl(other, GrizzlySeries.le)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.le)
 
     def lt(self, other):
-        return self._compare_binop_impl(other, GrizzlySeries.lt)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.lt)
 
     def __add__(self, other):
         return self.add(other)
@@ -310,6 +313,9 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
 
     def __eq__(self, other):
         return self.eq(other)
+
+    def __ne__(self, other):
+        return self.e(other)
 
     def __ge__(self, other):
         return self.ge(other)

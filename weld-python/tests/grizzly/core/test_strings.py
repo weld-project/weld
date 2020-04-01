@@ -64,6 +64,14 @@ def test_get():
     pandas_result = pd.Series(expect)
     assert pandas_result.equals(grizzly_result)
 
+def test_eq():
+    left = ["hello", "world", "strings", "morestrings"]
+    right = ["hel", "world", "string", "morestrings"]
+    x = gr.GrizzlySeries(left)
+    y = gr.GrizzlySeries(right)
+    assert list(x.eq(y).evaluate().values) == [False, True, False, True]
+    assert list(x.ne(y).evaluate().values) == [True, False, True, False]
+
 def test_strip():
     compare_vs_pandas('strip', ["",
     "   hi   ",

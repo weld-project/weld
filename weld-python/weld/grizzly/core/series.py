@@ -623,10 +623,16 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
             right_ty = other.elem_type
             rightval = other.weld_value
 
-        if isinstance(left_ty, (WeldVec, WeldStruct)) or isinstance(right_ty, (WeldVec, WeldStruct)):
+        is_string = isinstance(left_ty, WeldVec)
+        if op != "==" and op != "!=" and is_string:
             raise TypeError("Unsupported operand type(s) for '{}': {} and {}".format(op, left_ty, right_ty))
 
-        cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+        # Don't cast if we're dealing with strings.
+        if is_string:
+            cast_type = ""
+        else:
+            cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+
         output_type = cast_type if weld_elem_type is None else weld_elem_type
         lazy = binary_map(op,
                 left_type=str(left_ty),
@@ -771,6 +777,22 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
         """
         return self._compare_binop_impl(other, '==')
 
+    def ne(self, other):
+        """
+        Performs an element-wise not-equal comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.eq(10).evaluate()
+        0    False
+        1     True
+        2     True
+        dtype: bool
+
+        """
+        return self._compare_binop_impl(other, '!=')
+
     def ge(self, other):
         """
         Performs an element-wise '>=' comparison.
@@ -855,6 +877,9 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
 
     def __eq__(self, other):
         return self.eq(other)
+
+    def __ne__(self, other):
+        return self.ne(other)
 
     def __ge__(self, other):
         return self.ge(other)
