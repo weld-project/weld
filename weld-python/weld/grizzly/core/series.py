@@ -784,7 +784,7 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
         Examples
         --------
         >>> s = GrizzlySeries([10, 20, 30])
-        >>> s.eq(10).evaluate()
+        >>> s.ne(10).evaluate()
         0    False
         1     True
         2     True
