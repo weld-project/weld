@@ -182,11 +182,6 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
 
         self.columns = ColumnIndex(column_index)
 
-    def _require_known_length(self):
-        if self.length == GrizzlyDataFrame.UNKNOWN_LENGTH:
-            raise GrizzlyError("function {} disallowed on DataFrame of unknown length: try calling 'evaluate()' first".format(
-                func))
-
     def _col(self, col):
         """
         Returns the column associated with the column name 'col'.
@@ -218,15 +213,26 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
                 print("{}: {}".format(col, code))
 
 
-    def add(self, other):
+    def _arithmetic_binop_impl(self, other, series_op):
         """
-        Add this DataFrame with another one, aligning on columns.
+        Apply the binary operation between this DataFrame and other.
+
+        Parameters
+        ----------
+        other : DataFrame, scalar, GrizzlySeries
+            If other is a DataFrame, aligns on column name. If the binary
+            operator is not supported on any column, raises a TypeError.
+        series_op : The binary operation to apply.
+
+        Returns
+        -------
+        GrizzlyDataFrame
 
         """
         new_data = []
         if not isinstance(other, GrizzlyDataFrame):
             for data in self.data:
-                new_data.append(data + other)
+                new_data.append(series_op(data, other))
             return GrizzlyDataFrame(new_data,
                     columns=copy.deepcopy(self.columns),
                     _length=self.length,
@@ -247,6 +253,75 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
                 columns=ColumnIndex(new_cols),
                 _length=self.length,
                 _fastpath=True)
+
+    def add(self, other):
+        return self._arithmetic_binop_impl(other, GrizzlySeries.add)
+
+    def sub(self, other):
+        return self._arithmetic_binop_impl(other, GrizzlySeries.sub)
+
+    def mod(self, other):
+        return self._arithmetic_binop_impl(other, GrizzlySeries.mod)
+
+    def mul(self, other):
+        return self._arithmetic_binop_impl(other, GrizzlySeries.mul)
+
+    def truediv(self, other):
+        return self._arithmetic_binop_impl(other, GrizzlySeries.truediv)
+
+    def divide(self, other):
+        return self.truediv(other)
+
+    def div(self, other):
+        return self.truediv(other)
+
+    def eq(self, other):
+        return self._compare_binop_impl(other, GrizzlySeries.eq)
+
+    def ge(self, other):
+        return self._compare_binop_impl(other, GrizzlySeries.ge)
+
+    def gt(self, other):
+        return self._compare_binop_impl(other, GrizzlySeries.gt)
+
+    def le(self, other):
+        return self._compare_binop_impl(other, GrizzlySeries.le)
+
+    def lt(self, other):
+        return self._compare_binop_impl(other, GrizzlySeries.lt)
+
+    def __add__(self, other):
+        return self.add(other)
+
+    def __sub__(self, other):
+        return self.sub(other)
+
+    def __mul__(self, other):
+        return self.mul(other)
+
+    def __truediv__(self, other):
+        return self.truediv(other)
+
+    def __divmod__(self, other):
+        return self.divmod(other)
+
+    def __mod__(self, other):
+        return self.mod(other)
+
+    def __eq__(self, other):
+        return self.eq(other)
+
+    def __ge__(self, other):
+        return self.ge(other)
+
+    def __gt__(self, other):
+        return self.gt(other)
+
+    def __le__(self, other):
+        return self.le(other)
+
+    def __lt__(self, other):
+        return self.lt(other)
 
     def __str__(self):
         if self.pandas_df is not None:

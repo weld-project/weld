@@ -590,6 +590,23 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
     def _arithmetic_binop_impl(self, other, op, truediv=False, weld_elem_type=None):
         """
         Performs the operation on two `Series` elementwise.
+
+        Parameters
+        ----------
+        other: scalar or GrizzlySeries
+            the RHS operand
+        op: str
+            the operator to apply.
+        truediv: bool, optional
+            is this a truediv?
+        weld_elem_type: WeldType or None
+            the element type produced by this operation. None
+            means it is inferred based on Numpy's type conversion rules.
+
+        Returns
+        -------
+        GrizzlySeries
+
         """
         left_ty = self.elem_type
         scalar_ty = GrizzlySeries.scalar_ty(other, left_ty)
@@ -605,6 +622,9 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
                 raise GrizzlyError("RHS of binary operator must be a GrizzlySeries")
             right_ty = other.elem_type
             rightval = other.weld_value
+
+        if isinstance(left_ty, (WeldVec, WeldStruct)) or isinstance(right_ty, (WeldVec, WeldStruct)):
+            raise TypeError("Unsupported operand type(s) for '{}': {} and {}".format(op, left_ty, right_ty))
 
         cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
         output_type = cast_type if weld_elem_type is None else weld_elem_type
@@ -624,39 +644,195 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
         return self._arithmetic_binop_impl(other, op, weld_elem_type=Bool())
 
     def add(self, other):
+        """
+        Performs an element-wise addition.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.add(10).evaluate()
+        0    20
+        1    30
+        2    40
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '+')
 
     def sub(self, other):
+        """
+        Performs an element-wise subtraction.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.sub(10).evaluate()
+        0     0
+        1    10
+        2    20
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '-')
 
     def mod(self, other):
+        """
+        Performs an element-wise modulo.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 25, 31])
+        >>> s.mod(10).evaluate()
+        0    0
+        1    5
+        2    1
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '%')
 
     def mul(self, other):
+        """
+        Performs an element-wise multiplication.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 25, 31])
+        >>> s.mul(10).evaluate()
+        0    100
+        1    250
+        2    310
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '*')
 
     def truediv(self, other):
+        """
+        Performs an element-wise "true" division.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.truediv(10).evaluate()
+        0    1.0
+        1    2.0
+        2    3.0
+        dtype: float64
+
+        """
         return self._arithmetic_binop_impl(other, '/', truediv=True)
 
     def divide(self, other):
+        """
+        Performs an element-wise "true" division.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.divide(10).evaluate()
+        0    1.0
+        1    2.0
+        2    3.0
+        dtype: float64
+
+        """
         return self.truediv(other)
 
     def div(self, other):
+        """
+        Performs an element-wise "true" division.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.div(10).evaluate()
+        0    1.0
+        1    2.0
+        2    3.0
+        dtype: float64
+
+        """
         return self.truediv(other)
 
     def eq(self, other):
+        """
+        Performs an element-wise equality comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.eq(10).evaluate()
+        0     True
+        1    False
+        2    False
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '==')
 
     def ge(self, other):
+        """
+        Performs an element-wise '>=' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.ge(20).evaluate()
+        0    False
+        1     True
+        2     True
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '>=')
 
     def gt(self, other):
+        """
+        Performs an element-wise '>' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.gt(20).evaluate()
+        0    False
+        1    False
+        2     True
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '>')
 
     def le(self, other):
+        """
+        Performs an element-wise '<=' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.le(20).evaluate()
+        0     True
+        1     True
+        2    False
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '<=')
 
     def lt(self, other):
+        """
+        Performs an element-wise '<' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.lt(20).evaluate()
+        0     True
+        1    False
+        2    False
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '<')
 
     def __add__(self, other):

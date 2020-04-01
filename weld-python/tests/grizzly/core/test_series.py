@@ -130,3 +130,8 @@ def test_unsupported_binop_error():
         a = gr.GrizzlySeries([1,2,3])
         b = pd.Series([1,2,3])
         a.add(b)
+
+    with pytest.raises(TypeError):
+        a = gr.GrizzlySeries(["hello", "world"])
+        b = gr.GrizzlySeries(["hello", "world"])
+        a.divide(b)
