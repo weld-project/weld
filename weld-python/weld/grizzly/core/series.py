@@ -48,6 +48,10 @@ class GrizzlySeries(Forwarding, GrizzlyBase):
     (the 'S' dtype forces memory usage per string to match the length of the
     largest string in the array, which is clearly suboptimal).
 
+    Unlike pandas Series, GrizzlySeries do not support alignment of index
+    values for performance reasons. To align the indices of two Series, consider
+    using a DataFrame with a join operator.
+
     Parameters
     ----------
 

@@ -1,58 +1,6 @@
 """
 A Weld wrapper for pandas.DataFrame.
 
-
-    List of things this needs to support:
-
-    1. Access to each column as a Series.
-    2. Access to each row as a vector-of-structs
-    3. Alignment of operations along columns
-
-    E.g, how do we implement element-wise ops over DataFrames?
-
-    Each DataFrame has a Weld type of Struct(Vec, Vec, ...)
-
-    Each operation will update one or more vectors.
-
-    let col1 = ...;
-    let col2 = ...;
-    ...
-    {col1, col2, ...}
-
-    Binary ops:
-    DataFrame + Series: match column name, if no name, align to first column
-        # This is different from pandas, it seems
-    DataFrame + DataFrame: match column name
-    DataFrame + scalar: apply to each value.
-
-    Name -> Slot (Name can be anything, slot is an int refering to the slot in the struct)
-
-    merge indices
-        names = Name -> (SlotLeft, SlotRight)
-        names = sortbykey(names)
-
-    for (name, i) in enumerate(names):
-        new_data[i] = Op(data[SlotLeft], data[SlotRight])
-        new_index[name] = i
-
-    ^ indexing logic is implemented in Python, processing logic is implemented
-    in Weld. Combines flexibility with speed.
-
-    What about indexing along rows? Grizzly doesn't support this. Too hard to
-    support arbitrary row indexing with good performance. Also hard to parallelize
-    things when you allow random row-based indexing (Why? Because need
-    to do a lookup to match indexes, so every operation becomes a join)
-
-    - a: Int64Index[0, 1, 2, 4], 0, 1, 2, 3
-    - b: Int64Index[0, 1, 3, 4], 0, 1, 2, 3
-    Need to do a join on these indices...
-
-    Row index alignment instead happens with explicit joins.
-    1) Convert to DataFrame with an index as a column
-    2) Apply filters to each DataFrame
-    3) Join the dataframes on the index
-    4) Perform task.
-
 """
 
 import numpy as np
@@ -72,15 +20,25 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
     """
     An API-compatible DataFrame backed by Weld.
 
+    DataFrames are dictionary-like containers of Series of the same length.
+    Each Series can be a different data type. Operations on DataFrames align on
+    column name. Unlike pandas, DataFrame operations do not align on row
+    indexes.
+
     Examples
     --------
-
     >>> df = GrizzlyDataFrame({'name': ['mike', 'sam', 'sally'], 'age': [20, 22, 56]})
     >>> df
         name  age
     0   mike   20
     1    sam   22
     2  sally   56
+    >>> df2 = GrizzlyDataFrame({'nom': ['jacques', 'kelly', 'marie'], 'age': [50, 60, 70]})
+    >>> df.add(df2).to_pandas()
+       age  name  nom
+    0   70   NaN  NaN
+    1   82   NaN  NaN
+    2  126   NaN  NaN
 
     """
 
