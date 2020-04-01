@@ -107,10 +107,38 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
 
     @property
     def is_value(self):
+        """
+        Returns whether this DataFrame is a physical value.
+
+        If this is True, evaluate() is guaranteed to be a no-op.
+
+        Examples
+        --------
+        >>> df = GrizzlyDataFrame({'name': ['sam', 'sally'], 'age': [25, 50]})
+        >>> df.is_value
+        True
+        >>> df = df.add(df)
+        >>> df.is_value
+        False
+
+        """
         return self.pandas_df is not None or\
                 all([child.is_identity for child in self.children])
 
     def evaluate(self):
+        """
+        Evaluates this `GrizzlyDataFrame` and returns itself.
+
+        Evaluation reduces the currently stored computation to a physical value
+        by compiling and running a Weld program. If this `GrizzlyDataFrame` refers
+        to a physical value and no computation, no program is compiled, and this
+        method returns `self` unmodified.
+
+        Returns
+        -------
+        GrizzlyDataFrame
+
+        """
         if not self.is_value:
             if len(self.data) == 0:
                 # We're an empty DataFrame
@@ -139,15 +167,30 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
             # Reset the weld representation.
             delattr(self, "weld_value_")
         assert self.is_value
+        return self
 
     def to_pandas(self, copy=False):
+        """
+        Evaluate and convert this GrizzlyDataFrame to a pandas DataFrame.
+
+        Parameters
+        ----------
+        copy : bool
+            whether to copy the data into the new DataFrame. This only guarantees
+            that a copy _will_ occur; it does not guarantee that a copy will not.
+
+        Returns
+        -------
+        pandas.DataFrame
+
+        """
         self.evaluate()
         if self.pandas_df is not None:
             return self.pandas_df
         col_to_data = dict()
         for col in self.columns:
             col_to_data[col] = self._col(col).values
-        self.pandas_df = pd.DataFrame(data=col_to_data)
+        self.pandas_df = pd.DataFrame(data=col_to_data, copy=copy)
         return self.pandas_df
 
     # ------------------- Initialization ----------------------
