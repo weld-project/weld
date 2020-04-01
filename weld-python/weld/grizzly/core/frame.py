@@ -59,9 +59,9 @@ import numpy as np
 import pandas as pd
 
 import weld.encoders.numpy as wenp
-import weld.grizzly.weld.agg as weldagg
+import weld.grizzly.weld.ops as weldops
 
-from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
+from weld.lazy import WeldLazy, identity
 from weld.grizzly.core.forwarding import Forwarding
 from weld.grizzly.core.generic import GrizzlyBase
 from weld.grizzly.core.indexes import ColumnIndex
@@ -92,21 +92,65 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
     _encoder = wenp.NumPyWeldEncoder()
     _decoder = wenp.NumPyWeldDecoder()
 
+    # ------------------- GrizzlyBase methods ----------------------
+
     @property
     def weld_value(self):
-        # TODO: Construct the Weld value. This is a 'MakeStruct' of each series in slot order.
-        pass
+        if hasattr(self, "weld_value_"):
+            return self.weld_value_
 
+        if len(self.data) == 0:
+            raise GrizzlyError("weld_value cannot be accessed on DataFrame with no data")
+        output_type = WeldStruct([col.weld_value.output_type for col in self.data])
+        self.weld_value_ = weldops.make_struct(*[col.weld_value for col in self.data])(output_type, GrizzlyDataFrame._decoder)
+        return self.weld_value_
+
+    @property
     def is_value(self):
         return self.pandas_df is not None or\
-                all([child.is_identity for child in self.children]) or hasattr(self, "_evaluating")
+                all([child.is_identity for child in self.children])
 
     def evaluate(self):
-        pass
+        if not self.is_value:
+            if len(self.data) == 0:
+                # We're an empty DataFrame
+                self.pandas_df = pd.DataFrame()
+                return
+            # Collect each vector into a struct rather than evaluating each Series individually:
+            # this is more efficient so computations shared among vectors can be optimized.
+            result = self.weld_value.evaluate()
+            columns = result[0]
+            new_data = []
+            length = None
+            for column in columns:
+                data = column.copy2numpy()
+                column_length = len(data)
+                if length is not None:
+                    assert column_length == length, "invalid DataFrame produced after evaluation"
+                else:
+                    length = column_length
+                series = GrizzlySeries(data)
+                new_data.append(series)
+
+            # Columns is unchanged
+            self.pandas_df = None
+            self.data = new_data
+            self.length = length
+            # Reset the weld representation.
+            delattr(self, "weld_value_")
+        assert self.is_value
 
     def to_pandas(self, copy=False):
         self.evaluate()
-        pass
+        if self.pandas_df is not None:
+            return self.pandas_df
+        col_to_data = dict()
+        for col in self.columns:
+            col_to_data[col] = self._col(col).values
+        self.pandas_df = pd.DataFrame(data=col_to_data)
+        return self.pandas_df
+
+    # ------------------- Initialization ----------------------
 
     def __init__(self, data, columns=None, _length=UNKNOWN_LENGTH, _fastpath=False):
         if _fastpath:
@@ -138,26 +182,40 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         self.columns = ColumnIndex(column_index)
 
     def _require_known_length(self):
-        if self.length == UNKNOWN_LENGTH:
+        if self.length == GrizzlyDataFrame.UNKNOWN_LENGTH:
             raise GrizzlyError("function {} disallowed on DataFrame of unknown length: try calling 'evaluate()' first".format(
                 func))
 
+    def _col(self, col):
+        """
+        Returns the column associated with the column name 'col'.
+
+        """
+        return self.data[self.columns[col]]
+
+    # ------------------- Getting and Setting Items ----------------------
+
     def __getitem__(self, key):
-        return self.data[self.columns[key]]
+        # TODO(shoumik): Fuller implementation of this.
+        return self._col(key)
 
-    """
-    Disabling the below because we need to know the length of a Series before adding it to a DataFrame.
-    def __setitem__(self, key, value):
-        self.require_known_length(self, __setitem__)
-        if not isinstance(value, GrizzlySeries):
-            value = GrizzlySeries(value)
-            if not isinstance(value, GrizzlySeries):
-                raise TypeError("Unsupported Series in DataFrame: {}".format(value))
+    # ------------------- Ops ----------------------
 
-        self.columns.append(key)
-        assert self.columns[key] == len(self.data)
-        self.data.append(value)
-    """
+    def explain(self):
+        """
+        Prints a string that describes the operations to compute each column.
+
+        If this DataFrame is a value, prints the data.
+
+        """
+        if self.pandas_df is not None:
+            print(self.pandas_df)
+        else:
+            for col in self.columns:
+                code = self._col(col).code
+                code = code.replace("\n", "\n\t")
+                print("{}: {}".format(col, code))
+
 
     def add(self, other):
         """
@@ -178,7 +236,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
             new_cols.append(col)
             if left_slot is None or right_slot is None:
                 # TODO(shoumik): Handle this case by making a lazy computation.
-                assert self.length != UNKNOWN_LENGTH
+                assert self.length != GrizzlyDataFrame.UNKNOWN_LENGTH
                 nans = np.empty(self.length)
                 nans[:] = np.nan
                 new_data.append(GrizzlySeries(nans))
