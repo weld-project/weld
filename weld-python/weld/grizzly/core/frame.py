@@ -171,7 +171,10 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         #
         # TODO(shoumik): Convert string data to dtype 'S' here so it doesn't get copied when wrapping the Series as
         # GrizzlySeries.
-        self.pandas_df = pd.DataFrame(data, columns=columns)
+        if isinstance(data, pd.DataFrame):
+            self.pandas_df = data
+        else:
+            self.pandas_df = pd.DataFrame(data, columns=columns)
         self.length = len(self.pandas_df)
         for (i, col) in enumerate(self.pandas_df):
             grizzly_series = GrizzlySeries(self.pandas_df[col], name=self.pandas_df[col].name)
@@ -191,9 +194,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
 
     # ------------------- Getting and Setting Items ----------------------
 
-    def __getitem__(self, key):
-        # TODO(shoumik): Fuller implementation of this.
-        return self._col(key)
+    # TODO!
 
     # ------------------- Ops ----------------------
 
@@ -213,7 +214,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
                 print("{}: {}".format(col, code))
 
 
-    def _arithmetic_binop_impl(self, other, series_op):
+    def _arithmetic_binop_impl(self, other, series_op, fill=np.nan):
         """
         Apply the binary operation between this DataFrame and other.
 
@@ -222,7 +223,10 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         other : DataFrame, scalar, GrizzlySeries
             If other is a DataFrame, aligns on column name. If the binary
             operator is not supported on any column, raises a TypeError.
-        series_op : The binary operation to apply.
+        series_op : func
+            The binary operation to apply.
+        compare : bool
+            whether this is a comparison operation.
 
         Returns
         -------
@@ -244,9 +248,10 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
             if left_slot is None or right_slot is None:
                 # TODO(shoumik): Handle this case by making a lazy computation.
                 assert self.length != GrizzlyDataFrame.UNKNOWN_LENGTH
-                nans = np.empty(self.length)
-                nans[:] = np.nan
-                new_data.append(GrizzlySeries(nans))
+                dtype = np.array([fill]).dtype
+                vals = np.empty(self.length, dtype=dtype)
+                vals[:] = fill
+                new_data.append(GrizzlySeries(vals))
             else:
                 new_data.append(series_op(self.data[left_slot], other.data[right_slot]))
         return GrizzlyDataFrame(new_data,
@@ -276,22 +281,23 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         return self.truediv(other)
 
     def eq(self, other):
-        return self._arithmetic_binop_impl(other, GrizzlySeries.eq)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.eq, fill=False)
 
     def ne(self, other):
-        return self._arithmetic_binop_impl(other, GrizzlySeries.ne)
+        # Fill with True on this one.
+        return self._arithmetic_binop_impl(other, GrizzlySeries.ne, fill=True)
 
     def ge(self, other):
-        return self._arithmetic_binop_impl(other, GrizzlySeries.ge)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.ge, fill=False)
 
     def gt(self, other):
-        return self._arithmetic_binop_impl(other, GrizzlySeries.gt)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.gt, fill=False)
 
     def le(self, other):
-        return self._arithmetic_binop_impl(other, GrizzlySeries.le)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.le, fill=False)
 
     def lt(self, other):
-        return self._arithmetic_binop_impl(other, GrizzlySeries.lt)
+        return self._arithmetic_binop_impl(other, GrizzlySeries.lt, fill=False)
 
     def __add__(self, other):
         return self.add(other)
@@ -315,7 +321,7 @@ class GrizzlyDataFrame(Forwarding, GrizzlyBase):
         return self.eq(other)
 
     def __ne__(self, other):
-        return self.e(other)
+        return self.ne(other)
 
     def __ge__(self, other):
         return self.ge(other)
