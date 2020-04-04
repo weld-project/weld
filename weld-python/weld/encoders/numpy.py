@@ -17,7 +17,7 @@ directly since they only involve a pointer copy.
 import ctypes
 import numpy as np
 
-from .encoder_base import *
+from weld.encoders.struct import StructWeldEncoder, StructWeldDecoder
 from weld.types import *
 
 # We just need this for the path.
@@ -118,15 +118,15 @@ def binop_output_type(left_ty, right_ty, truediv=False):
     Examples
     --------
     >>> binop_output_type(Bool(), Bool())
-    <weld.types.Bool object at ...>
+    bool
     >>> binop_output_type(I8(), U16())
-    <weld.types.I32 object at ...>
+    i32
     >>> binop_output_type(U8(), U16())
-    <weld.types.U16 object at ...>
+    u16
     >>> binop_output_type(F32(), U16())
-    <weld.types.F32 object at ...>
+    f32
     >>> binop_output_type(I8(), U64())
-    <weld.types.F64 object at ...>
+    f64
     """
     if not truediv and left_ty == right_ty:
         return left_ty
@@ -238,13 +238,13 @@ def dtype_to_weld_type(ty):
     Examples
     --------
     >>> dtype_to_weld_type('int32')
-    <weld.types.I32 object at 0x...>
+    i32
     >>> dtype_to_weld_type('float')
-    <weld.types.F64 object at 0x...>
+    f64
     >>> dtype_to_weld_type('i8')
-    <weld.types.I64 object at 0x...>
+    i64
     >>> dtype_to_weld_type(np.int16)
-    <weld.types.I16 object at 0x...>
+    i16
 
     Parameters
     ----------
@@ -295,7 +295,11 @@ class StringConversionFuncs(object):
         return result
 
 
-class NumPyWeldEncoder(WeldEncoder):
+class NumPyWeldEncoder(StructWeldEncoder):
+    """
+    Encodes NumPy arrays as Weld arrays.
+
+    """
 
     @staticmethod
     def _convert_1d_array(array, check_type=None):
@@ -353,7 +357,7 @@ class NumPyWeldEncoder(WeldEncoder):
             return False
         return True
 
-    def encode(self, obj, ty):
+    def encode_element(self, obj, ty):
         if NumPyWeldEncoder._is_string_array(obj):
             assert ty == WeldVec(WeldVec(I8()))
             return StringConversionFuncs.numpy_string_array_to_weld(obj)
@@ -365,9 +369,12 @@ class NumPyWeldEncoder(WeldEncoder):
         else:
             raise TypeError("Unexpected type {} in NumPy encoder".format(type(obj)))
 
-class NumPyWeldDecoder(WeldDecoder):
-    """ Decodes an encoded Weld array into a NumPy array.
+class NumPyWeldDecoder(StructWeldDecoder):
+    """
+    Decodes an encoded Weld array into a NumPy array.
 
+    Examples
+    --------
     >>> arr = np.array([1,2,3], dtype='int32')
     >>> encoded = NumPyWeldEncoder().encode(arr, WeldVec(I32()))
     >>> NumPyWeldDecoder().decode(ctypes.pointer(encoded), WeldVec(I32()))
@@ -457,7 +464,7 @@ class NumPyWeldDecoder(WeldDecoder):
                     return True
         return False
 
-    def decode(self, obj, restype, context=None):
+    def decode_element(self, obj, restype, context=None):
         # A 1D NumPy array
         obj = obj.contents
         if NumPyWeldDecoder._is_string_array(restype):

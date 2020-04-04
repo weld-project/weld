@@ -85,25 +85,6 @@ def test_float_nan():
         yield a + b + c * d - e
     _compare_vs_pandas(eval_expression)
 
-def test_basic_fallback():
-    # Tests basic unsupported functionality.
-    # NOTE: This test will need to change as more features are added...
-    def eval_expression(cls):
-        a = cls([1, 2, 3])
-        b = cls([-4, 5, -6])
-        # Test 1: abs()
-        c = a + b
-        yield (c.abs() + a)
-        # Test 2: argmin()
-        c = a + b
-        yield cls(c.argmin())
-        # Test 3: reindex()
-        c = a + b
-        res = c.reindex(index=[2, 0, 1])
-        # Falls back to Pandas, since we don't support indices.
-        assert isinstance(res, pd.Series)
-    _compare_vs_pandas(eval_expression)
-
 def test_scalar():
     types = ['int8', 'uint8', 'int16', 'uint16', 'int32',\
             'uint32', 'int64', 'uint64', 'float32', 'float64']
@@ -129,6 +110,19 @@ def test_indexing():
     assert np.array_equal(x[x == 2].evaluate().values, np.array([2], dtype='int64'))
     assert np.array_equal(x[x < 0].evaluate().values, np.array([], dtype='int64'))
 
+def test_name():
+    # Test that names propagate after operations.
+    x = gr.GrizzlySeries([1,2,3], name="testname")
+    y = x + x
+    assert y.evaluate().name == "testname"
+    y = x.agg(['sum', 'count'])
+    assert y.evaluate().name == "testname"
+    y = x[:2]
+    assert y.evaluate().name == "testname"
+    y = x[x == 1]
+    assert y.evaluate().name == "testname"
+
+
 def test_unsupported_binop_error():
     # Test unsupported
     from weld.grizzly.core.error import GrizzlyError
@@ -136,3 +130,8 @@ def test_unsupported_binop_error():
         a = gr.GrizzlySeries([1,2,3])
         b = pd.Series([1,2,3])
         a.add(b)
+
+    with pytest.raises(TypeError):
+        a = gr.GrizzlySeries(["hello", "world"])
+        b = gr.GrizzlySeries(["hello", "world"])
+        a.divide(b)

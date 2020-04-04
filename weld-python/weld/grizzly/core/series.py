@@ -1,11 +1,10 @@
 """
 A Weld wrapper for pandas.Series.
+
 """
 
-import inspect
 import numpy as np
 import pandas as pd
-import warnings
 
 import weld.encoders.numpy as wenp
 import weld.grizzly.weld.agg as weldagg
@@ -13,20 +12,12 @@ import weld.grizzly.weld.agg as weldagg
 from weld.lazy import PhysicalValue, WeldLazy, WeldNode, identity
 from weld.grizzly.weld.ops import *
 from weld.grizzly.core.error import GrizzlyError
+from weld.grizzly.core.forwarding import Forwarding
+from weld.grizzly.core.generic import GrizzlyBase
 from weld.grizzly.core.strings import StringMethods
 from weld.types import *
 
-def _grizzlyseries_constructor_with_fallback(data=None, **kwargs):
-    """
-    A flexible constructor for Series._constructor, which needs to be able
-    to fall back to a Series (if a certain operation cannot produce GrizzlySeries).
-    """
-    try:
-        return GrizzlySeries(data=data, **kwargs)
-    except TypeError:
-        return pd.Series(data=data, **kwargs)
-
-class GrizzlySeries(pd.Series):
+class GrizzlySeries(Forwarding, GrizzlyBase):
     """
     A lazy `Series` object backed by a Weld computation.
 
@@ -36,6 +27,31 @@ class GrizzlySeries(pd.Series):
     regular pandas behavior. Similarly, `GrizzlySeries` that are initialized with
     features that Grizzly does not understand are initialized as `pd.Series`.
 
+    Implementation Notes
+    --------------------
+
+    A Series in Grizzly is a 1D array of a single data type. Transformations on
+    Series can result in scalar values, which are directly evaluated and
+    returned as scalars, as other Series that encapsulate lazy Weld
+    computations, or as DataFrames (currently unsupported).
+
+    A Series always has a known type: unlike pandas Series, which are wrappers
+    around Python object, Series with heterogeneous types (i.e., Series with
+    `dtype=object`) are disallowed. Series that are not evaluated/store a lazy
+    compuations also always have a known type.
+
+    Internally, most Series are backed by NumPy arrays, which themselves are
+    stored as contiguous C arrays. The main exception is string data. Grizzly
+    operates exclusively over UTF-8 encoded data, and most string operations
+    will create a copy of the input data upon evaluation. Strings are currently
+    encoded as NumPy arrays with the 'S' dtype: this may change in the future
+    (the 'S' dtype forces memory usage per string to match the length of the
+    largest string in the array, which is clearly suboptimal).
+
+    Unlike pandas Series, GrizzlySeries do not support alignment of index
+    values for performance reasons. To align the indices of two Series, consider
+    using a DataFrame with a join operator.
+
     Parameters
     ----------
 
@@ -43,65 +59,57 @@ class GrizzlySeries(pd.Series):
         Contains data stored in the series.
     dtype : numpy.dtype or str
         Data type of the values.
+    name : str
+        A name to give the series.
 
     Examples
     --------
-    >>> x = GrizzlySeries([1,2,3])
+    >>> x = GrizzlySeries([1,2,3], name="numbers")
     >>> x
     0    1
     1    2
     2    3
-    dtype: int64
+    Name: numbers, dtype: int64
     """
-
-    # TODO(shoumik): Does this need to be in _metadata instead?
-    _internal_names = pd.Series._internal_names + ['weld_value_']
-    _internal_names_set = set(_internal_names)
 
     # The encoders and decoders are stateless, so no need to instantiate them
     # for each computation.
     _encoder = wenp.NumPyWeldEncoder()
     _decoder = wenp.NumPyWeldDecoder()
 
-    # ---------------------- WeldNode abstract methods ---------------------
+    @property
+    def weld_value(self):
+        return self.weld_value_
+
+    @weld_value.setter
+    def weld_value(self, value):
+        self.weld_value_ = value
 
     @property
-    def children(self):
+    def is_value(self):
         """
-        Returns the Weld children of this `GrizzlySeries.
+        Returns whether this collection wraps a physical value rather than
+        a computation.
         """
-        return self.weld_value_.children
-
-    @property
-    def output_type(self):
-        """
-        Returns the Weld output type of this `GrizzlySeries`.
-
-        The output type is always a `WeldVec` of some type.
-        """
-        return self.weld_value_.output_type
+        return self.weld_value.is_identity or hasattr(self, "evaluating_")
 
     @property
     def elem_type(self):
         """
         Returns the element type of this `GrizzlySeries`.
         """
-        return self.weld_value_.output_type.elem_type
+        return self.output_type.elem_type
 
     @property
-    def is_value(self):
+    def dtype(self):
         """
-        Returns whether this `GrizzlySeries` wraps a physical value rather than
-        a computation.
-        """
-        return self.weld_value_.is_identity or hasattr(self, "evaluating_")
+        Returns the NumPy dtype of this Series.
 
-    @property
-    def code(self):
         """
-        Returns the Weld code for this computation.
-        """
-        return self.weld_value_.code
+        elem_type = self.elem_type
+        if elem_type == WeldVec(I8()):
+            return np.dtype('S')
+        return wenp.weld_type_to_dtype(elem_type)
 
     @property
     def values(self):
@@ -126,7 +134,7 @@ class GrizzlySeries(pd.Series):
         """
         if not self.is_value:
             raise GrizzlyError("GrizzlySeries is not evaluated and does not have values. Try calling 'evaluate()' first.")
-        return super(GrizzlySeries, self).values
+        return self.values_
 
     def evaluate(self):
         """
@@ -139,16 +147,16 @@ class GrizzlySeries(pd.Series):
 
         """
         if not self.is_value:
-            result = self.weld_value_.evaluate()
+            result = self.weld_value.evaluate()
             # TODO(shoumik): it's unfortunate that this copy is needed, but
             # things are breaking without it (even if we hold a reference to
             # the WeldContext). DEBUG ME!
             if isinstance(result[0], wenp.weldbasearray):
-                super(GrizzlySeries, self).__init__(result[0].copy2numpy())
+                self.__init__(result[0].copy2numpy(), name=self.name)
             else:
-                super(GrizzlySeries, self).__init__(result[0])
+                self.__init__(result[0], name=self.name)
             setattr(self, "evaluating_", 0)
-            self.weld_value_ = identity(PhysicalValue(self.values,\
+            self.weld_value = identity(PhysicalValue(self.values,\
                     self.output_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
             delattr(self, "evaluating_")
@@ -190,32 +198,26 @@ class GrizzlySeries(pd.Series):
         """
         self.evaluate()
         assert self.is_value
-        return pd.Series(data=self.array,
-                index=self.index,
-                copy=copy,
-                fastpath=True)
-
-    # ------------- pd.Series methods required for subclassing ----------
-
-    @property
-    def _constructor(self):
-        return _grizzlyseries_constructor_with_fallback
-
-    @property
-    def _constructor_expanddim(self):
-        return NotImplemented
+        return pd.Series(data=self.values_, name=self.name, copy=copy)
 
     # ---------------------- Class methods ------------------------------
 
     @classmethod
-    def _supports_grizzly(cls, data):
+    def supported(cls, data):
         """
-        Returns the Weld type if data supports Grizzly operation, or returns
-        `None` otherwise.
+        Returns whether the given ndarray supports Grizzly operation.
 
         Parameters
         ----------
         data : np.array
+
+        Examples
+        -------
+        >>> GrizzlySeries.supported(np.array([1,2,3], dtype='int32'))
+        vec[i32]
+        >>> GrizzlySeries.supported(np.array(["foo","bar"], dtype='object'))
+        >>> GrizzlySeries.supported(np.array(["foo","bar"], dtype='S'))
+        vec[vec[i8]]
 
         """
         if not isinstance(data, np.ndarray) or data.ndim != 1:
@@ -228,13 +230,9 @@ class GrizzlySeries(pd.Series):
 
     # ---------------------- Initialization ------------------------------
 
-    def __init__(self, data, dtype=None, index=None, **kwargs):
-        # Everything important is done in __new__.
-        pass
-
-    def __new__(cls, data, dtype=None, index=None, **kwargs):
+    def __init__(self, data, dtype=None, name=None):
         """
-        Internal initialization. Tests below are for internal visibility only.
+        Initialize a new GrizzlySeries.
 
         >>> x = GrizzlySeries([1,2,3])
         >>> x
@@ -242,64 +240,46 @@ class GrizzlySeries(pd.Series):
         1    2
         2    3
         dtype: int64
-        >>> x.__class__
-        <class 'weld.grizzly.core.series.GrizzlySeries'>
-        >>> x = GrizzlySeries(np.ones(5))
-        >>> x.__class__
-        <class 'weld.grizzly.core.series.GrizzlySeries'>
-        >>> y = GrizzlySeries(['hi', 'bye'])
-        >>> y.__class__
-        <class 'weld.grizzly.core.series.GrizzlySeries'>
-        >>> y = GrizzlySeries([1, 2, 3], index=[1, 0, 2]) # Unsupported
-        >>> y.__class__
-        <class 'pandas.core.series.Series'>
+
         """
+
         s = None
         if isinstance(data, WeldLazy):
-            self = super(GrizzlySeries, cls).__new__(cls)
-            super(GrizzlySeries, self).__init__(np.array([], dtype=dtype), **kwargs)
-            self.weld_value_ = data
-            return self
+            self.name = name
+            self.values_ = None
+            self.weld_value = data
+            return
 
-        if index is not None and not isinstance(index, pd.RangeIndex):
-            # TODO(shoumik): This is probably incomplete, since we could have a
-            # RangeIndex that does not capture the full span of the data, has a
-            # non-zero step, etc.
-            return pd.Series(data, dtype=dtype, index=index, **kwargs)
-
-        if len(kwargs) != 0:
-            # Unsupported arguments present: bail for now.
-            return pd.Series(data, dtype=dtype, index=index, **kwargs)
-
+        self.name = name
         if isinstance(data, list) and len(data) > 0 and isinstance(data[0], str):
             # Try to convert a list of strings into a supported Numpy array.
-            data = np.array(data, dtype='S')
-
-        if isinstance(data, pd.Series):
-            data = data.values
+            self.values_ = np.array(data, dtype='S')
+        elif isinstance(data, pd.Series):
+            if self.name is None:
+                self.name = data.name
+            if data.values.dtype == 'object' and len(data) > 0 and isinstance(data[0], str):
+                self.values_ = np.array(data, dtype='S')
+            else:
+                self.values_ = data.values
         elif not isinstance(data, np.ndarray):
-            # First, convert the input into a Series backed by an ndarray.
-             s = pd.Series(data, dtype=dtype, index=index, **kwargs)
-             data = s.values
+            # First, convert the input into a Numpy array.
+            self.values_ = np.array(data, dtype=dtype)
+        else:
+            self.values_ = data
 
         # Try to create a Weld type for the input.
-        weld_type = GrizzlySeries._supports_grizzly(data)
-        if weld_type is not None:
-            self = super(GrizzlySeries, cls).__new__(cls)
-            super(GrizzlySeries, self).__init__(data, dtype=dtype, **kwargs)
-            self.weld_value_ = identity(
-                    PhysicalValue(data, weld_type, GrizzlySeries._encoder),
+        weld_type = GrizzlySeries.supported(self.values_)
+        if weld_type:
+            self.weld_value = identity(
+                    PhysicalValue(self.values_, weld_type, GrizzlySeries._encoder),
                     GrizzlySeries._decoder)
-            return self
-
-        # Don't re-convert values if we did it once already -- it's expensive.
-        return s if s is not None else pd.Series(data, dtype=dtype, index=index, **kwargs)
+        else:
+            raise GrizzlyError("unsupported data type '{}'".format(self.values_.dtype))
 
     # ---------------------- StringMethods ------------------------------
 
     @property
     def str(self):
-        # TODO(shoumik.palkar): Use pandas.core.accessor.CachedAccessor?
         return StringMethods(self)
 
     # ---------------------- Aggregation ------------------------------
@@ -337,9 +317,9 @@ class GrizzlySeries(pd.Series):
             # Result is a primitive, so we can use the default primitive decoder.
             decoder = None
 
-        result_weld_value = weldagg.agg(self.weld_value_, self.elem_type, funcs)(output_type, decoder)
+        result_weld_value = weldagg.agg(self.weld_value, self.elem_type, funcs)(output_type, decoder)
         if decoder is not None:
-            return GrizzlySeries(result_weld_value, dtype=wenp.weld_type_to_dtype(output_elem_type))
+            return GrizzlySeries(result_weld_value, dtype=wenp.weld_type_to_dtype(output_elem_type), name=self.name)
         else:
             # TODO(shoumik.palkar): Do we want to evaluate here? For now, we will, but eventually it may
             # be advantageous to have a lazy scalar value that can be used elsewhere.
@@ -536,7 +516,7 @@ class GrizzlySeries(pd.Series):
 
         """
         # If the key is a scalar
-        scalar_key = GrizzlySeries._scalar_ty(key, I64())
+        scalar_key = GrizzlySeries.scalar_ty(key, I64())
         if isinstance(scalar_key, I64):
             self.evaluate()
             return self.values[key]
@@ -552,7 +532,7 @@ class GrizzlySeries(pd.Series):
                     arg = default
                 else:
                     raise GrizzlyError("slice got 'None' when value where expected")
-            arg_ty = GrizzlySeries._scalar_ty(arg, I64())
+            arg_ty = GrizzlySeries.scalar_ty(arg, I64())
             if not isinstance(arg_ty, I64):
                 raise GrizzlyError("slices in __getitem__() must be integers")
             return int(arg)
@@ -565,8 +545,8 @@ class GrizzlySeries(pd.Series):
             start = normalize_slice_arg(key.start, default=0)
             stop = normalize_slice_arg(key.stop, default=None)
             # Weld's slice operator takes a size instead of a stopping index.
-            lazy = slice_expr(self.weld_value_, start, stop - start)(self.output_type, GrizzlySeries._decoder)
-            return GrizzlySeries(lazy, dtype=self.dtype)
+            lazy = slice_expr(self.weld_value, start, stop - start)(self.output_type, GrizzlySeries._decoder)
+            return GrizzlySeries(lazy, dtype=self.dtype, name=self.name)
 
         if not isinstance(key, GrizzlySeries):
             raise GrizzlyError("array-like key in __getitem__ must be a GrizzlySeries.")
@@ -599,47 +579,37 @@ class GrizzlySeries(pd.Series):
         """
         assert other is None
         if not isinstance(bool_mask, GrizzlySeries) or\
-                not isinstance(bool_mask.output_type.elem_type, Bool):
+                not isinstance(bool_mask.elem_type, Bool):
                     raise GrizzlyError("bool_mask must be a GrizzlySeries with dtype=bool")
 
-        lazy = mask(self.weld_value_, self.output_type.elem_type, bool_mask.weld_value_)(self.output_type, GrizzlySeries._decoder)
-        return GrizzlySeries(lazy, dtype=self.dtype)
+        lazy = mask(self.weld_value, self.elem_type, bool_mask.weld_value)(self.output_type, GrizzlySeries._decoder)
+        return GrizzlySeries(lazy, dtype=self.dtype, name=self.name)
 
     # ---------------------- Operators ------------------------------
-
-    @classmethod
-    def _scalar_ty(cls, value, cast_ty):
-        """
-        Returns the scalar Weld type of a scalar Python value. If the value is not a scalar,
-        returns None. For primitive 'int' values, returns 'cast_ty'.
-
-        This returns 'None' if the value type is not supported.
-
-        Parameters
-        ----------
-        value : any
-            value whose dtype to obtain.
-
-        Returns
-        -------
-        np.dtype
-
-        """
-        if hasattr(value, 'dtype') and hasattr(value, 'shape') and value.shape == ():
-            return wenp.dtype_to_weld_type(value.dtype)
-        if isinstance(value, int):
-            return cast_ty
-        if isinstance(value, float):
-            return F64()
-        if isinstance(value, bool):
-            return Bool()
 
     def _arithmetic_binop_impl(self, other, op, truediv=False, weld_elem_type=None):
         """
         Performs the operation on two `Series` elementwise.
+
+        Parameters
+        ----------
+        other: scalar or GrizzlySeries
+            the RHS operand
+        op: str
+            the operator to apply.
+        truediv: bool, optional
+            is this a truediv?
+        weld_elem_type: WeldType or None
+            the element type produced by this operation. None
+            means it is inferred based on Numpy's type conversion rules.
+
+        Returns
+        -------
+        GrizzlySeries
+
         """
-        left_ty = self.output_type.elem_type
-        scalar_ty = GrizzlySeries._scalar_ty(other, left_ty)
+        left_ty = self.elem_type
+        scalar_ty = GrizzlySeries.scalar_ty(other, left_ty)
         if scalar_ty is not None:
             # Inline scalars directly instead of adding them
             # as dependencies.
@@ -650,19 +620,28 @@ class GrizzlySeries(pd.Series):
             # GrizzlySeries.
             if not isinstance(other, GrizzlySeries):
                 raise GrizzlyError("RHS of binary operator must be a GrizzlySeries")
-            right_ty = other.output_type.elem_type
-            rightval = other.weld_value_
+            right_ty = other.elem_type
+            rightval = other.weld_value
 
-        cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+        is_string = isinstance(left_ty, WeldVec)
+        if op != "==" and op != "!=" and is_string:
+            raise TypeError("Unsupported operand type(s) for '{}': {} and {}".format(op, left_ty, right_ty))
+
+        # Don't cast if we're dealing with strings.
+        if is_string:
+            cast_type = ""
+        else:
+            cast_type = wenp.binop_output_type(left_ty, right_ty, truediv)
+
         output_type = cast_type if weld_elem_type is None else weld_elem_type
         lazy = binary_map(op,
                 left_type=str(left_ty),
                 right_type=str(right_ty),
-                leftval=self.weld_value_,
+                leftval=self.weld_value,
                 rightval=rightval,
                 scalararg=scalar_ty is not None,
                 cast_type=cast_type)(WeldVec(output_type), GrizzlySeries._decoder)
-        return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(output_type))
+        return GrizzlySeries(lazy, dtype=wenp.weld_type_to_dtype(output_type), name=self.name)
 
     def _compare_binop_impl(self, other, op):
         """
@@ -671,39 +650,211 @@ class GrizzlySeries(pd.Series):
         return self._arithmetic_binop_impl(other, op, weld_elem_type=Bool())
 
     def add(self, other):
+        """
+        Performs an element-wise addition.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.add(10).evaluate()
+        0    20
+        1    30
+        2    40
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '+')
 
     def sub(self, other):
+        """
+        Performs an element-wise subtraction.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.sub(10).evaluate()
+        0     0
+        1    10
+        2    20
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '-')
 
     def mod(self, other):
+        """
+        Performs an element-wise modulo.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 25, 31])
+        >>> s.mod(10).evaluate()
+        0    0
+        1    5
+        2    1
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '%')
 
     def mul(self, other):
+        """
+        Performs an element-wise multiplication.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 25, 31])
+        >>> s.mul(10).evaluate()
+        0    100
+        1    250
+        2    310
+        dtype: int64
+
+        """
         return self._arithmetic_binop_impl(other, '*')
 
     def truediv(self, other):
+        """
+        Performs an element-wise "true" division.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.truediv(10).evaluate()
+        0    1.0
+        1    2.0
+        2    3.0
+        dtype: float64
+
+        """
         return self._arithmetic_binop_impl(other, '/', truediv=True)
 
     def divide(self, other):
+        """
+        Performs an element-wise "true" division.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.divide(10).evaluate()
+        0    1.0
+        1    2.0
+        2    3.0
+        dtype: float64
+
+        """
         return self.truediv(other)
 
     def div(self, other):
+        """
+        Performs an element-wise "true" division.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.div(10).evaluate()
+        0    1.0
+        1    2.0
+        2    3.0
+        dtype: float64
+
+        """
         return self.truediv(other)
 
     def eq(self, other):
+        """
+        Performs an element-wise equality comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.eq(10).evaluate()
+        0     True
+        1    False
+        2    False
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '==')
 
+    def ne(self, other):
+        """
+        Performs an element-wise not-equal comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.ne(10).evaluate()
+        0    False
+        1     True
+        2     True
+        dtype: bool
+
+        """
+        return self._compare_binop_impl(other, '!=')
+
     def ge(self, other):
+        """
+        Performs an element-wise '>=' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.ge(20).evaluate()
+        0    False
+        1     True
+        2     True
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '>=')
 
     def gt(self, other):
+        """
+        Performs an element-wise '>' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.gt(20).evaluate()
+        0    False
+        1    False
+        2     True
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '>')
 
     def le(self, other):
+        """
+        Performs an element-wise '<=' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.le(20).evaluate()
+        0     True
+        1     True
+        2    False
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '<=')
 
     def lt(self, other):
+        """
+        Performs an element-wise '<' comparison.
+
+        Examples
+        --------
+        >>> s = GrizzlySeries([10, 20, 30])
+        >>> s.lt(20).evaluate()
+        0     True
+        1    False
+        2    False
+        dtype: bool
+
+        """
         return self._compare_binop_impl(other, '<')
 
     def __add__(self, other):
@@ -727,6 +878,9 @@ class GrizzlySeries(pd.Series):
     def __eq__(self, other):
         return self.eq(other)
 
+    def __ne__(self, other):
+        return self.ne(other)
+
     def __ge__(self, other):
         return self.ge(other)
 
@@ -742,70 +896,12 @@ class GrizzlySeries(pd.Series):
     def __str__(self):
         if self.is_value:
             # This is guaranteed to be 0-copy.
-            return str(self.to_pandas())
-        return "GrizzlySeries({}, dtype: {}, deps: [{}])".format(
-                self.weld_value_.expression,
-                str(wenp.weld_type_to_dtype(self.output_type.elem_type)),
+            return str(self.to_pandas(copy=False))
+        return "GrizzlySeries({}, name: {}, dtype: {}, deps: [{}])".format(
+                self.weld_value.expression,
+                self.name,
+                str(self.dtype),
                 ", ".join([str(child.id) for child in self.children]))
 
     def __repr__(self):
         return str(self)
-
-    # ---------------------- Method forwarding setup ------------------------------
-
-    @classmethod
-    def _get_class_that_defined_method(cls, meth):
-        """
-        Returns the class that defines the requested method. For methods that are
-        defined outside of a particular set of Grizzly-defined classes, Grizzly will
-        first evaluate lazy results before forwarding the data to `pandas.Series`.
-        """
-        if inspect.ismethod(meth):
-            for cls in inspect.getmro(meth.__self__.__class__):
-                if cls.__dict__.get(meth.__name__) is meth:
-                    return cls
-        if inspect.isfunction(meth):
-            return getattr(inspect.getmodule(meth),
-                           meth.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0])
-
-    @classmethod
-    def _requires_forwarding(cls, meth):
-        defined_in = cls._get_class_that_defined_method(meth)
-        if defined_in is not None and defined_in is not cls:
-            return True
-        else:
-            return False
-
-    @classmethod
-    def forward(cls):
-        from functools import wraps
-        def forward_decorator(func):
-            @wraps(func)
-            def forwarding_wrapper(self, *args, **kwargs):
-                self.evaluate()
-                result = func(self, *args, **kwargs)
-                # Unsupported functions will return Series -- try to
-                # switch back to GrizzlySeries.
-                if not isinstance(result, GrizzlySeries) and isinstance(result, pd.Series):
-                    try_convert = GrizzlySeries(data=result.values, index=result.index)
-                    if not isinstance(try_convert, GrizzlySeries):
-                        warnings.warn("Unsupported operation '{}' produced unsupported Series: falling back to Pandas".format(
-                            func.__name__))
-                    return try_convert
-                return result
-            return forwarding_wrapper
-        return forward_decorator
-
-    @classmethod
-    def _add_forwarding_methods(cls):
-        methods = dir(cls)
-        for meth in methods:
-            if meth.startswith("_"):
-                # We only want to do this for API methods.
-                continue
-            attr = getattr(cls, meth)
-            if cls._requires_forwarding(attr):
-                setattr(cls, meth, cls.forward()(attr))
-
-# Wrap public API methods for forwarding
-GrizzlySeries._add_forwarding_methods()

@@ -36,6 +36,22 @@ def _binary_apply(op, leftval, rightval, cast_type, infix=True):
                 op=op, leftval=leftval, rightval=rightval, cast_type=cast_type)
 
 @weld.lazy.weldfunc
+def make_struct(*args):
+    """
+    Constructs a struct with the provided args.
+
+    Examples
+    --------
+    >>> make_struct("weldlazy1", "2", "3").code
+    '{weldlazy1, 2, 3}'
+    >>> make_struct("weldlazy1").code
+    '{weldlazy1}'
+
+    """
+    assert len(args) > 0
+    return "{" + ", ".join(args) + "}"
+
+@weld.lazy.weldfunc
 def unary_map(op, ty, value):
     """
     Constructs a Weld string to apply a unary function to a vector.

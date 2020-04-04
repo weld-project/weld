@@ -2,7 +2,7 @@
 Tests for constructing and evaluating lazy operations.
 """
 
-from weld.encoders import PrimitiveWeldEncoder, PrimitiveWeldDecoder
+from weld.encoders.primitives import PrimitiveWeldEncoder, PrimitiveWeldDecoder
 from weld.types import *
 from weld.lazy import *
 
