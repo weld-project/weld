@@ -1,7 +1,7 @@
 OS = $(shell uname -s)
 LLVM_VERSION = $(shell llvm-config --version | cut -d . -f 1,2)
 
-CFLAGS = -O3 -fno-use-cxa-atexit
+CFLAGS = -O3 -fno-use-cxa-atexit -fPIE
 CFLAGS += $(shell llvm-config --cppflags) $(shell llvm-config --cxxflags)
 LIBDIR = $(shell llvm-config --libdir)
 LLVMLIBS = $(shell llvm-config --system-libs) $(shell llvm-config --libs)
